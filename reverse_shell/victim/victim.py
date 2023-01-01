@@ -18,7 +18,7 @@ def send_computer_info(sock):
     my_system = platform.uname()
     os = my_system.system
     arch = my_system.machine
-    computer_info = json.dumps({"os": os, "arch": arch, "name": my_system.node})  # Sterialize the computer info
+    computer_info = json.dumps({"os": os.lower(), "arch": arch.lower(), "name": my_system.node.lower()})  # Sterialize the computer info
     ut.send_message(computer_info, sock)
 
 
