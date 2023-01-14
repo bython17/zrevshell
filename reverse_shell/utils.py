@@ -7,8 +7,8 @@ def log(focus_message: str, description):
 
 
 def send_message(message: str, sock: socket.socket):
-    message_length = len(message)  # this is the lenght of the message we are going to send
-    # Now we need to add white spacess to the message_length inorder to make it fit to the HEADER_SIZE
+    message_length = len(message)  # this is the length of the message we are going to send
+    # Now we need to add white spaces to the message_length in order to make it fit to the HEADER_SIZE
     message_length = f"{message_length:<{ct.HEADER_SIZE}}"  # here what i did was just adding white spaces to the message_length.
     sock.send(message_length.encode(ct.ENCODING))  # then send that to the server or client
 
@@ -16,7 +16,7 @@ def send_message(message: str, sock: socket.socket):
     sock.send(message.encode(ct.ENCODING))
 
 
-def recieve_message(sock: socket.socket):
+def receive_message(sock: socket.socket):
     message_length = sock.recv(ct.HEADER_SIZE).decode(ct.ENCODING)
 
     if not message_length:
@@ -40,11 +40,11 @@ def recieve_message(sock: socket.socket):
     #######################################################
 
     ############### Bython's Logic##########################
-    recieve_sizes = [16] * (message_length // 16)
-    recieve_sizes.append(message_length % 16)
+    receive_sizes = [16] * (message_length // 16)
+    receive_sizes.append(message_length % 16)
 
-    for recieve_size in recieve_sizes:
-        part_message = sock.recv(recieve_size).decode(ct.ENCODING)
+    for receive_size in receive_sizes:
+        part_message = sock.recv(receive_size).decode(ct.ENCODING)
         full_message += part_message
     #####################################################
 

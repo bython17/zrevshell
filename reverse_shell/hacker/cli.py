@@ -47,20 +47,20 @@ def command_line(commands_with_funcs: dict):
         # Check if the we didn't get any command
         if command_and_args is not None:
             command, args = command_and_args
-            postional_args, optional_args = args
+            positional_args, optional_args = args
         else:
             continue
 
         if command in commands_with_funcs:
             func, required_len_args, available_optional_args, default_args = commands_with_funcs[command]
 
-            positional_argument_check = required_len_args == len(postional_args)
+            positional_argument_check = required_len_args == len(positional_args)
             optional_argument_check = all([True if arg in available_optional_args else False for arg in optional_args])
 
             if positional_argument_check and optional_argument_check:
-                func(*postional_args, *default_args, **optional_args)
+                func(*positional_args, *default_args, **optional_args)
             elif not positional_argument_check:
-                ut.log("error", f"expected {'None' if required_len_args == 0 else required_len_args} arguments, but got {len(postional_args)} arguments")
+                ut.log("error", f"expected {'None' if required_len_args == 0 else required_len_args} arguments, but got {len(positional_args)} arguments")
             elif not optional_argument_check:
                 # Filter the optional argument that is not described
                 false_optional_arg = [f"'{arg}'" for arg in optional_args if arg not in available_optional_args]
@@ -86,7 +86,7 @@ def initiate(additional_commands: dict = {}):
 
     Here are the commands to play with:
 
-        help => dislplay this message
+        help => display this message
         clear => clear the screen
         list-victims => list all online victims
         attack[victim_id] => attack the victim online with their id

