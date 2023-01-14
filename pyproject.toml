@@ -1,11 +1,11 @@
 [tool.poetry]
-name = "python-reverse-shell"
+name = "zrevshell"
 version = "0.1.0"
 description = "A server-client based reverse shell written in Python"
 authors = ["Bezaleel Wondimagegn <92359779+bython17@users.noreply.github.com>", "Natnael Yilma <nython14@github.com>"]
 license = "GPL-3.0 license"
 readme = "README.md"
-packages = [{include = "python_reverse_shell"}]
+packages = [{include = "zrevshell"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
