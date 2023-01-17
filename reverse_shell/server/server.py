@@ -3,13 +3,14 @@ from http import HTTPStatus
 from functools import partial
 from datetime import datetime
 from pathlib import Path
+from reverse_shell import __version__, __app_name__
+from reverse_shell.server import ErrorCodes
+import argparse
 import reverse_shell.utils as ut
 import json
 import uuid
 import base64
-
-HOST = "0.0.0.0"
-PORT = 80
+import sys
 
 
 class ZrevshellServer(BaseHTTPRequestHandler):
@@ -85,16 +86,7 @@ def generate_token():
 #     decoded_ascii = base64.b64decode(ascii_encoded_base64)
 #     return decoded_ascii.decode("ascii")
 
-
-def initialize_server(auth_token: str | None = None, hacker_token: str | None = None):
-    # auth_token is a base64 message i.e it is a string that has been decoded from a base64 byte using ascii.
-    if not auth_token:
-        auth_token = generate_token()
-
-    if not hacker_token:
-        hacker_token = generate_token()
-
-    # Create a log file with the hacker and auth token
+def create_log_file(auth_token, hacker_token):
     current_time = str(datetime.now())
     current_time = current_time.replace(":", "-")
     current_time = current_time.replace(" ", "-")
@@ -110,10 +102,32 @@ def initialize_server(auth_token: str | None = None, hacker_token: str | None = 
         data = {"auth_token": auth_token, "hacker_token": hacker_token}
         log_file.write(json.dumps(data))
 
+
+def get_config():
+    argument_parser = argparse.ArgumentParser(prog=f"{__app_name__} server", description="The server for the zrevshell project", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    argument_parser.add_argument("--from-log", type=Path, required=False, help="Server generated log file used to re-initiate the same session as the previous.", default=None)
+
+    argument_parser.add_argument("-p", "--port", type=int, required=False, help="The port on which the server runs on.", default=80)
+
+    argument_parser.add_argument("-i", "--ip", type=str, required=False, help="The ip where the server is hosted on.", default="0.0.0.0")
+
+    argument_parser.add_argument("--version", "-v", action="version", version=f"{__app_name__} server v{__version__}")
+
+    return argument_parser.parse_args()
+
+
+def initialize_server(auth_token: str, hacker_token: str, host: str, port: int, should_create_log_file=True):
+    # auth_token is a base64 message i.e it is a string that has been decoded from a base64 byte using ascii.
+
+    # Create a log file with the hacker and auth token
+    if should_create_log_file:
+        create_log_file(auth_token, hacker_token)
+
     handler = partial(ZrevshellServer, auth_token)
 
-    ut.log("info", f"Server is running on {HOST} port {PORT}...")
-    server = HTTPServer((HOST, PORT), handler)
+    ut.log("info", f"Server is running on {host} port {port}...")
+    server = HTTPServer((host, port), handler)
     ut.log("info", f"Generated authentication token -> {auth_token}")
     ut.log("info", f"Generated hacker's token -> {hacker_token}")
 
@@ -124,4 +138,32 @@ def initialize_server(auth_token: str | None = None, hacker_token: str | None = 
     print("Server has shutdown.")
 
 
-initialize_server()
+def main():
+    config = get_config()
+    # Extract the auth_token and hacker_token from file
+    # if the file exists else generate them
+    if (path := config.from_log) is not None:
+        file_path = Path(path)
+        if not file_path.is_file():
+            ut.log("error", f"The file `{path}` doesn't exist!")
+            sys.exit(ErrorCodes.file_not_found)
+
+        contents = file_path.read_text("utf-8")
+        try:
+            data = json.loads(contents)
+            auth_token = data["auth_token"]
+            hacker_token = data["hacker_token"]
+        except json.JSONDecodeError:
+            ut.log("error", f"File is not valid, Please use a valid server generated file.")
+            sys.exit(ErrorCodes.incorrect_file_format)
+        should_create_log_file = False
+
+    else:
+        auth_token = generate_token()
+        hacker_token = generate_token()
+        should_create_log_file = True
+
+    initialize_server(auth_token, hacker_token, config.ip, config.port, should_create_log_file=should_create_log_file)
+
+
+main()
