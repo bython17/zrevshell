@@ -128,8 +128,5 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# server logs
-logs/
-
-# server files
-victim_computer_specs.json
+# Ignore all server generated files
+server_data/
