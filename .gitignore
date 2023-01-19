@@ -130,3 +130,6 @@ dmypy.json
 
 # Ignore all server generated files
 server_data/
+
+# fake dll file created by victim
+ole32.dll

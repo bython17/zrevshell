@@ -8,14 +8,11 @@ from reverse_shell.server import ErrorCodes
 import argparse
 import reverse_shell.utils as ut
 import json
-import uuid
-import base64
 import sys
 
 
 class ZrevshellServer(BaseHTTPRequestHandler):
     def __init__(self, auth_token: str, hacker_token: str, base_dir: Path,  *args, **kwargs):
-        # auth_token is a base64 message i.e it is a string that has been decoded from a base64 byte using ascii.
         self.auth_token = auth_token
         self.hacker_token = hacker_token
         self.base_dir = base_dir
@@ -26,7 +23,11 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         super().__init__(*args, **kwargs)
 
     def is_authenticated(self):
-        if self.headers.get("Authorization") == f"Basic {self.auth_token}":
+        # Check if the decoded authorization equals to the auth_token
+        client_token = str(self.headers.get("Authorization")).replace("Basic", "").strip()
+        client_token = ut.decode_token(client_token)
+
+        if client_token == self.auth_token:
             return True
         else:
             self.send_error(HTTPStatus.UNAUTHORIZED)
@@ -56,30 +57,25 @@ class ZrevshellServer(BaseHTTPRequestHandler):
                 data = ut.read_json(file_path)
                 client_id = self.headers.get("client-id")
                 content_size = int(self.headers.get("content-length"))
+
+                # If the data exists then send the 200 status code but if it doesn't exist
+                # then send the 201 status code
+                if client_id in data:
+                    status = HTTPStatus.OK
+                else:
+                    status = HTTPStatus.CREATED
+
                 # Create or modify the data
                 data[client_id] = json.loads(self.rfile.read(content_size))
 
                 # Write the data back to the file
                 ut.write_json(file_path, data)
 
-                # If the data exists then send the 200 status code but if it doesn't exist
-                # then send the 201 status code
-                if client_id in data:
-                    self.send_response(HTTPStatus.OK)
-                    self.end_headers()
-                else:
-                    self.send_response(HTTPStatus.CREATED)
-                    self.end_headers()
+                self.send_response(status)
+                self.end_headers()
             else:
                 self.send_error(HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
                 self.end_headers()
-
-
-def generate_token():
-    random_uuid = uuid.uuid4()
-    random_encoded_bytes = str(random_uuid).encode('ascii')
-    base64_encoded_bytes = base64.b64encode(random_encoded_bytes)
-    return base64_encoded_bytes.decode('ascii')
 
 
 def create_log_file(auth_token, hacker_token, base_dir: Path):
@@ -152,14 +148,14 @@ def main():
             data = json.loads(contents)
             auth_token = data["auth_token"]
             hacker_token = data["hacker_token"]
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, KeyError):
             ut.log("error", f"File is not valid, Please use a valid server generated file.")
             sys.exit(ErrorCodes.incorrect_file_format)
         should_create_log_file = False
 
     else:
-        auth_token = generate_token()
-        hacker_token = generate_token()
+        auth_token = ut.generate_token()
+        hacker_token = ut.generate_token()
         should_create_log_file = True
 
     initialize_server(auth_token, hacker_token, config.ip, config.port, config.server_dir, should_create_log_file=should_create_log_file)

