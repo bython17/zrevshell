@@ -1,5 +1,4 @@
 import subprocess
-import uuid
 import platform
 import os
 import re
