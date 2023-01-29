@@ -60,7 +60,7 @@ def read_json(file_path: Path, bytes=False, encoding="utf-8"):
 
 def encode_token(token: str):
     """ Encode a string to base64 then decode it to string."""
-    random_encoded_bytes = str(token).encode("ascii")
+    random_encoded_bytes = token.encode("ascii")
     base64_encoded_bytes = base64.b64encode(random_encoded_bytes)
     return base64_encoded_bytes.decode("ascii")
 

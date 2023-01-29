@@ -7,6 +7,7 @@ from http import HTTPStatus
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace
 from functools import partial
 import sys
+import binascii
 
 
 class Config:
@@ -127,12 +128,48 @@ class DespicableServer(BaseHTTPRequestHandler):
         # Initialize the BaseHTTPRequestHandler
         super().__init__(*args, **kwargs)
 
+    def send_unauthorized(self):
+        """ Tell the users they are not authorized """
+        self.send_error(HTTPStatus.UNAUTHORIZED)
+        self.end_headers()
+
+    def is_authorized(self):
+        """ Check if our user is authenticated to use our server (in other words has the authentication token) """
+        authorization_header = self.headers.get("Authorization")
+
+        # If our authorization header doesn't exist then return false right away
+        if authorization_header is None:
+            self.send_unauthorized()
+            return False
+
+        # Ok so now we have an authorization header. let's make sure that it is
+        # indeed our authorization token, but before that we should check that the
+        # string the user sent is base64 encrypted. And we know that by trying to decode
+        # the token the user sent us using base64 and if the token doesn't decode successfully
+        # then it means the token is invalid so we'll return False.
+        try:
+            decoded_token = ut.decode_token(authorization_header)
+        except binascii.Error:
+            self.send_unauthorized()
+            return False
+
+        # If the token doesn't match our token then return false too
+        if decoded_token != self.configuration.auth_token:
+            self.send_unauthorized()
+            return False
+
+        # If the token passes through all of that then it is indeed our token
+        return True
+
     def do_GET(self):
+        """ Handle our get requests"""
+
+        # First check if we are not authenticated, quit right away
+        if not self.is_authorized():
+            return
+
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/html")
-        if length := self.headers.get("content-length"):
-            content = self.rfile.read(length)
-            print(self.address_string, content, sep=": ")
         self.end_headers()
 
         self.wfile.write(bytes("<html><head><title>We are running a server</title></head> <body> <h1> Hello World </h1> </body></html>", "utf-8"))
