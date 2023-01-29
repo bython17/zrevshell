@@ -25,7 +25,7 @@ class Config:
         # ---- Session name and the base_dir
         self.base_dir = self.config.server_dir
         self.current_session_name = self.get_session_name()
-        self.new_session_file_needed = self.is_new_session()
+        self.new_session_file_needed = self.session_file_needed()
 
         # ---- Session data
         self.data = self.get_session_data()
@@ -58,7 +58,7 @@ class Config:
 
         return data
 
-    def is_new_session(self):
+    def session_file_needed(self):
         """ Check if the current session is a new session. """
         if self.config.from_session is None and not self.config.no_session_file:
             # Now we know that it's indeed a new session
@@ -92,7 +92,7 @@ class Config:
         argument is None."""
 
         # Checking for preconditions before accessing from the file
-        if self.config.from_session is None and not self.config.no_session_file:
+        if self.config.from_session is None or self.config.no_session_file:
             return None
 
         if not self.config.from_session.is_file():
@@ -171,8 +171,9 @@ class Session:
         ut.log("info", f"Hacking Token: {self.configuration.hacker_token}")
 
         # Create some empty space for the proceeding
-        print()
-        print()
+        print("\r")
+        # Create a header for the logs that the http server generates
+        ut.log("info", "--------- Server Logs --------")
 
         try:
             server.serve_forever()
