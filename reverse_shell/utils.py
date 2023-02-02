@@ -1,9 +1,19 @@
 from pathlib import Path
 from datetime import datetime
+from enum import Enum, auto
 import binascii
 import base64
 import uuid
 import json
+
+
+class ClientType():
+    """ Used to distinguish between the 3 client types. Use each field to represent the corresponding client type. """
+    # We didn't use Enum, because Enums are not JSON serializable.
+    # Plain numbers are fine since we don't care about the values
+    Hacker = 1
+    Victim = 2
+    Admin = 3
 
 
 def log(focus_message: str, description):

