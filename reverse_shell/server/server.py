@@ -132,7 +132,7 @@ class Config:
             # the fields we need so we are going to tell the user to input a correct
             # server generated file
             ut.log("error", "Invalid session file. Please use server generated session files.")
-            sys.exit(ErrorCodes.incorrect_file_format)
+            sys.exit(ErrorCodes.invalid_file)
 
         return data
 
@@ -184,14 +184,14 @@ class Config:
         if session_details is None:
             # This means that there was a json.JSONDecodeError so
             ut.log("error", "Invalid session file. Please use server generated session files.")
-            sys.exit(ErrorCodes.incorrect_file_format)
+            sys.exit(ErrorCodes.invalid_file)
 
         # Check if the given key exists in the session file else return None
         try:
             value = session_details[key]
         except KeyError:
             ut.log("error", "Invalid session file. Please use server generated session files.")
-            sys.exit(ErrorCodes.incorrect_file_format)
+            sys.exit(ErrorCodes.invalid_file)
 
         return value
 

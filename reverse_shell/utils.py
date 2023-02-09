@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import datetime
-from enum import Enum, auto
+from sys import exit
 import binascii
 import base64
 import uuid
@@ -29,43 +29,31 @@ def get_formatted_time():
 
 
 def write_blank_json(file_path: Path, bytes=False, encoding="utf-8"):
-    """ Write a blank json text i.e `{}` into a json file
-    returns None if there is a json.JSONDecodeError"""
-    try:
-        if bytes:
-            file_path.write_bytes("{}".encode(encoding))
-        else:
-            file_path.write_text("{}", encoding=encoding)
-    except json.JSONDecodeError:
-        return None
+    """ Write a blank json text i.e `{}` into a json file """
+    if bytes:
+        file_path.write_bytes("{}".encode(encoding))
+    else:
+        file_path.write_text("{}", encoding=encoding)
 
 
 def write_json(file_path: Path, data: dict, bytes=False, encoding="utf-8"):
-    """ Write a stringified python dictionary to the file_path
-    returns None if there is a json.JSONDecodeError"""
-    try:
-        if not bytes:
-            file_path.write_text(json.dumps(data))
-        else:
-            file_path.write_bytes(json.dumps(data).encode(encoding))
-    except json.JSONDecodeError:
-        return None
+    """ Write a stringified python dictionary to the file_path """
+    if not bytes:
+        json.dump(data, file_path.open("w"), indent=2)
+    else:
+        file_path.write_bytes(json.dumps(data).encode(encoding))
 
 
 def read_json(file_path: Path, bytes=False, encoding="utf-8"):
-    """ Read from the `file_path` and return a python dictionary.
-    returns None if there is a json.JSONDecodeError"""
-    try:
-        if not bytes:
-            if not file_path.is_file():
-                write_blank_json(file_path)
-            return json.loads(file_path.read_text())
-        else:
-            if not file_path.is_file():
-                write_blank_json(file_path, bytes=True, encoding=encoding)
-            return json.loads(file_path.read_bytes().decode(encoding))
-    except json.JSONDecodeError:
-        return None
+    """ Read from the `file_path` and return a python dictionary."""
+    if not bytes:
+        if not file_path.is_file():
+            write_blank_json(file_path)
+        return json.loads(file_path.read_text())
+    else:
+        if not file_path.is_file():
+            write_blank_json(file_path, bytes=True, encoding=encoding)
+        return json.loads(file_path.read_bytes().decode(encoding))
 
 
 def encode_token(token: str):
@@ -88,6 +76,11 @@ def generate_token():
     """ Generate a new token """
     random_uuid = uuid.uuid4()
     return str(random_uuid).replace("-", "")
+
+
+def error_exit(msg: str, code: int):
+    log("error", msg)
+    exit(code)
 
 
 def get_id(file_path: Path):
