@@ -78,27 +78,23 @@ class Config:
         self.ip = self.get_port_ip("ip", self.config.ip, "0.0.0.0")
 
         # ---- Saving profile changes
-        print(self.profile)
         self.commit_profile()
 
     def get_port_ip(self, profile_field: str, user_option, default):
         """ Get and validate the port range. """
-        # First check if the port is given then
+        # First check if the field is given then
         # check for the profile.
-
-        # Used when no other option is available
-        default_field = default
 
         field = user_option
 
         if field is None:
-            # This means the user didn't provide a port
+            # This means the user didn't provide the field
             # so let's query from the profile if it's found there
             field = self.query_profile(profile_field)
             if field is None:
-                # the port field is not found in the profile
-                # so finally let's set the default_port to the port
-                field = default_field
+                # the  field is not found in the profile
+                # so finally let's set the default to the field
+                field = default
 
         # Set the port in the profile
         self.profile[profile_field] = field
