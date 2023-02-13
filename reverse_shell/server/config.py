@@ -66,6 +66,16 @@ class Config:
         self.admin_token = self.get_token("admin_token")
         self.hacker_token = self.get_token("hacker_token")
 
+        # ---- Server Commands
+
+        # Server commands are request paths used like commands by the clients
+        # to make the server do the command. privileges will be assigned
+        # to each command.
+
+        self.server_cmds = {
+
+        }
+
         # ---- Python and response type map
         self.py_res_type_map = {
             str: "plain/text",
@@ -80,32 +90,45 @@ class Config:
         # ---- Saving profile changes
         self.commit_profile()
 
+    def get_server_cmd(self, cmd: str):
+        """ Get the server command from the """
+        pass
+
     def get_port_ip(self, profile_field: str, user_option, default):
-        """ Get and validate the port range. """
+        """ Get and validate the ip and port range. """
         # First check if the field is given then
         # check for the profile.
+        # Before all that let's check if the 'addresses' field exists
+        # in profile if it doesn't exist, create it.
+
+        if (address := self.query_profile("address")) is None:
+            self.profile["address"], address = {}, {}
 
         field = user_option
 
         if field is None:
             # This means the user didn't provide the field
             # so let's query from the profile if it's found there
-            field = self.query_profile(profile_field)
+            field = self.query_profile(profile_field, profile=address)
             if field is None:
                 # the  field is not found in the profile
-                # so finally let's set the default to the field
+                # so let's set the default to the field
                 field = default
-
-        # Set the port in the profile
-        self.profile[profile_field] = field
+                # and finally set the field in the profile
+                self.profile["address"][profile_field] = field
 
         return field
 
-    def query_profile(self, key: str):
+    def query_profile(self, key: str, profile: dict | None = None):
         """ Get a value in the sessions_file using it's `key`. Returns None if the key is not found in the profile """
+
+        # Set the profile to self.profile if not given
+        if profile is None:
+            profile = self.profile
+
         try:
             # Check if the given key exists in the profile file else return None
-            value = self.profile[key]
+            value = profile[key]
         except KeyError:
             return None
 
@@ -117,11 +140,15 @@ class Config:
 
     def get_token(self, token_name: str):
         """ Get the token using the token_name if the token doesn't exist then insert it. """
-        token = self.query_profile(token_name)
+        # Let's first check for the 'tokens' field
+        if (tokens := self.query_profile("tokens")) is None:
+            self.profile["tokens"], tokens = {}, {}
+
+        token = self.query_profile(token_name, profile=tokens)
 
         if token is None:
             token = ut.generate_token()
-            self.profile[token_name] = token
+            self.profile["tokens"][token_name] = token
 
         return token
 
