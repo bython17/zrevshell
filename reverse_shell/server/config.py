@@ -17,7 +17,7 @@ class Config:
 
         # Required database schema for the session and data databases.
         self.session_data_schema = ["""
-        CREATE TABLE IF NOT EXISTS victims(
+        CREATE TABLE IF NOT EXISTS victim_info(
             id TEXT PRIMARY KEY,
             host_name TEXT,
             os TEXT,
@@ -40,18 +40,10 @@ class Config:
             FOREIGN KEY(command_id) REFERENCES commands(command_id)
         )
         """, """
-        CREATE TABLE IF NOT EXISTS hackers(
-            hacker_id TEXT PRIMARY KEY,
-            status TEXT
-        )
-        """, """
-        CREATE TABLE IF NOT EXISTS privileges(
-            client_type TEXT PRIMARY KEY,
-            get INTEGER,
-            post INTEGER,
-            put INTEGER,
-            patch INTEGER,
-            head INTEGER
+        CREATE TABLE IF NOT EXISTS clients(
+            client_id TEXT PRIMARY KEY,
+            client_type TEXT,
+            status INTEGER
         )
         """]
 
@@ -73,11 +65,11 @@ class Config:
         # to each command.
 
         self.server_cmd_privileges = {
-            "verify": ut.ClientType.Victim,
-            "fetch_cmd": ut.ClientType.Victim,
-            "post_res": ut.ClientType.Victim,
-            "post_cmd": ut.ClientType.Hacker,
-            "fetch_res": ut.ClientType.Hacker
+            "verify": [ut.ClientType.Victim],
+            "fetch_cmd": [ut.ClientType.Victim],
+            "post_res": [ut.ClientType.Victim],
+            "post_cmd": [ut.ClientType.Hacker],
+            "fetch_res": [ut.ClientType.Hacker]
         }
 
         self.server_cmds = {self.get_server_cmd_id(cmd): cmd for cmd in self.server_cmd_privileges}
@@ -108,7 +100,7 @@ class Config:
 
         if cmd_id is None:
             # Let's now create the command id and save it in the profiles
-            cmd_id = ut.generate_token()[:8]
+            cmd_id = f"/{ut.generate_token()[:8]}"
             self.profile["server_commands"][cmd] = cmd_id
 
         return cmd_id
@@ -184,7 +176,19 @@ class Config:
         try:
             cur.execute(query)
             return cur.fetchall()
-        except sq.OperationalError:
+        except sq.Error:
+            return None
+
+    def execute_on_session_db(self, statement: str, __params=None):
+        """ Execute the `statement` on the database and return `None` if `sqlite3.OperationalError` get's raised and the cursor if successful. """
+        try:
+            conn = self.session_data_db.cursor()
+            res_cur = conn.execute(statement, __params if __params is not None else ())
+            self.session_data_db.commit()
+            return res_cur
+        except sq.Error as e:
+            ut.log("debug", f"SQLERROR: {e}")
+            ut.log("debug", f"    from: `{statement}`")
             return None
 
     def get_profile(self, profile_name: str) -> tuple[dict, Path]:
