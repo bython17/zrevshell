@@ -6,6 +6,7 @@ from reverse_shell import __app_name__, __version__
 from reverse_shell.server import ErrorCodes as ec
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from pathlib import Path
+from typing import Any
 import json as js
 import reverse_shell.utils as ut
 import sqlite3 as sq
@@ -151,7 +152,7 @@ class Config:
 
         return field
 
-    def query_profile(self, key: str, profile: dict | None = None):
+    def query_profile(self, key: str, profile: dict[Any, Any] | None = None):
         """Get a value in the sessions_file using it's `key`. Returns None if the key is not found in the profile"""
 
         # Set the profile to self.profile if not given
@@ -211,7 +212,7 @@ class Config:
             ut.log("debug", f"    from: `{statement}`")
             return None
 
-    def get_profile(self, profile_name: str) -> tuple[dict, Path]:
+    def get_profile(self, profile_name: str):
         profile_filepath = self.config.profile
 
         if profile_filepath is None:
@@ -242,7 +243,7 @@ class Config:
             )
 
     def get_database(
-        self, db_name: str, user_config_option: None | Path, db_schema: list
+        self, db_name: str, user_config_option: None | Path, db_schema: list[str]
     ) -> sq.Connection:
         """Return a sqlite3 database connection using the user_config_option parameter and validate it using the db_schema option if the database is not provided by the user needed tables will be created using the db_schema list"""
 

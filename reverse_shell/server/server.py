@@ -28,7 +28,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # Initializing our parent, cuz of respect.
         super().__init__(*args, **kwargs)
 
-    ########## Utility methods ##########
+    # ----------Utility methods ---------- #
 
     def c_send_error(self, code: HTTPStatus, message=None, explain=None):
         self.send_error(code, message, explain)
@@ -161,7 +161,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         return decoded_data
 
-    ########## Server command handler methods ##########
+    # ---------- Server command handler methods ---------- #
 
     def handle_cmd_verify(self, client_id: str, client_type: int, req_body: str | None):
         """Do what needs to be done if the server command sent is 'verify'."""
@@ -179,7 +179,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
                 return (False, HTTPStatus.CONFLICT)
         # If our user is valid then we can maybe add him to the database
         client_insert_op = self.config.execute_on_session_db(
-            f"INSERT INTO clients VALUES(?, ?, 1)", [client_id, client_type]
+            "INSERT INTO clients VALUES(?, ?, 1)", [client_id, client_type]
         )
         if client_insert_op is None:
             # Some kinda SQL error happened so let's send a internal server error message
@@ -346,13 +346,13 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # a tuple in a format of (result: bool, status_code: HTTPStatus) and we'll use that
         # for determining wether the result is an error or not and get the status code.
         # using our result let's now say something to the client.
-        if result[0] == True:
+        if result[0] is True:
             self.send_response(result[1])
             self.end_headers()
         else:
             self.c_send_error(result[1])
 
-    ########## HTTP request method handler methods(overridden) ##########
+    # ---------- HTTP request method handler methods ---------- #
 
     def do_GET(self):
         """Handle the GET requests."""
@@ -453,7 +453,7 @@ def start_server():
     # and need to clean up our server
     httpd.server_close()
 
-    ut.log("debug", f"Server has shutdown!")
+    ut.log("debug", "Server has shutdown!")
     sys.exit(0)
 
 
