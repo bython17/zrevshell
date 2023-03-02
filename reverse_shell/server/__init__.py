@@ -1,4 +1,4 @@
-class ErrorCodes():
+class ErrorCodes:
     file_not_found = 1
     invalid_file = 2
     file_already_exists = 3

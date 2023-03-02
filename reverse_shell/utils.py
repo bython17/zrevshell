@@ -1,14 +1,16 @@
 from pathlib import Path
 from datetime import datetime
 from sys import exit
+from typing import Any
 import binascii
 import base64
 import uuid
 import json
 
 
-class ClientType():
-    """ Used to distinguish between the 3 client types. Use each field to represent the corresponding client type. """
+class ClientType:
+    """Used to distinguish between the 3 client types. Use each field to represent the corresponding client type."""
+
     # We didn't use Enum, because Enums are not JSON serializable.
     # Plain numbers are fine since we don't care about the values
     Hacker = 1
@@ -21,7 +23,7 @@ def log(focus_message: str, description):
 
 
 def get_formatted_time():
-    """ Returns the current time using YYYY-MM-DD-HH-MM-SS"""
+    """Returns the current time using YYYY-MM-DD-HH-MM-SS"""
     current_time = str(datetime.now())
     current_time = current_time.replace(":", "-").replace(" ", "-")
     current_time = current_time.split(".")[0]
@@ -29,15 +31,15 @@ def get_formatted_time():
 
 
 def write_blank_json(file_path: Path, bytes=False, encoding="utf-8"):
-    """ Write a blank json text i.e `{}` into a json file """
+    """Write a blank json text i.e `{}` into a json file"""
     if bytes:
         file_path.write_bytes("{}".encode(encoding))
     else:
         file_path.write_text("{}", encoding=encoding)
 
 
-def write_json(file_path: Path, data: dict, bytes=False, encoding="utf-8"):
-    """ Write a stringified python dictionary to the file_path """
+def write_json(file_path: Path, data: dict[Any, Any], bytes=False, encoding="utf-8"):
+    """Write a stringified python dictionary to the file_path"""
     if not bytes:
         json.dump(data, file_path.open("w"), indent=2)
     else:
@@ -45,7 +47,7 @@ def write_json(file_path: Path, data: dict, bytes=False, encoding="utf-8"):
 
 
 def read_json(file_path: Path, bytes=False, encoding="utf-8"):
-    """ Read from the `file_path` and return a python dictionary."""
+    """Read from the `file_path` and return a python dictionary."""
     if not bytes:
         if not file_path.is_file():
             write_blank_json(file_path)
@@ -57,14 +59,14 @@ def read_json(file_path: Path, bytes=False, encoding="utf-8"):
 
 
 def encode_token(token: str):
-    """ Encode a string to base64 then decode it to string."""
+    """Encode a string to base64 then decode it to string."""
     random_encoded_bytes = token.encode("ascii")
     base64_encoded_bytes = base64.b64encode(random_encoded_bytes)
     return base64_encoded_bytes.decode("ascii")
 
 
 def decode_token(token: str | bytes):
-    """ Decode a base64 encoded byte that has been decoded to a string or 
+    """Decode a base64 encoded byte that has been decoded to a string or
     an original base64."""
     if isinstance(token, str):
         token = token.encode("ascii")
@@ -73,7 +75,7 @@ def decode_token(token: str | bytes):
 
 
 def generate_token():
-    """ Generate a new token """
+    """Generate a new token"""
     random_uuid = uuid.uuid4()
     return str(random_uuid).replace("-", "")
 
@@ -84,7 +86,7 @@ def error_exit(msg: str, code: int):
 
 
 def get_id(file_path: Path):
-    """ Get an ID for the client(either victim or hacker) and generate a new one
+    """Get an ID for the client(either victim or hacker) and generate a new one
     if the client's data file gets lost."""
     # get the ID of the client from our super secret file
 

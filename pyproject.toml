@@ -2,10 +2,10 @@
 name = "zrevshell"
 version = "0.1.0"
 description = "A server-client based reverse shell written in Python"
-authors = ["Bezaleel Wondimagegn <92359779+bython17@users.noreply.github.com>", "Natnael Yilma <nython14@github.com>"]
+authors = ["Bezaleel Wondimagegn <92359779+bython17@users.noreply.github.com>"]
 license = "GPL-3.0 license"
 readme = "README.md"
-packages = [{include = "zrevshell"}]
+packages = [{include = "reverse_shell"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -13,7 +13,29 @@ psutil = "^5.9.4"
 
 
 [tool.poetry.group.dev.dependencies]
-autopep8 = "^2.0.1"
+mypy = "^1.0.1"
+pytest = "^7.2.1"
+black = "^23.1.0"
+flake8 = "^6.0.0"
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
+
+[tool.mypy]
+files = "**/*.py"
+check_untyped_defs = true
+disallow_any_generics = true
+ignore_missing_imports = true
+no_implicit_optional = true
+show_error_codes = true
+strict_equality = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unreachable = true
+warn_unused_configs = true
+no_implicit_reexport = true
 
 [build-system]
 requires = ["poetry-core"]
