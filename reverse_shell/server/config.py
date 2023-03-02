@@ -29,7 +29,8 @@ class Config:
         CREATE TABLE IF NOT EXISTS commands(
             command_id TEXT PRIMARY KEY,
             victim_id TEXT,
-            command TEXT
+            command TEXT,
+            date DATE
         )
         """, """
         CREATE TABLE IF NOT EXISTS responses(
@@ -46,6 +47,12 @@ class Config:
             status INTEGER
         )
         """]
+
+        # A map of a victim with it's hacker that are in a live session
+        # used to prevent multiple hackers hacking the same machine at once.
+        self.hacking_sessions = {
+            # victim_id: hacker_id
+        }
 
         self.config = self.parse_arguments()
 
@@ -65,11 +72,12 @@ class Config:
         # to each command.
 
         self.server_cmd_privileges = {
-            "verify": [ut.ClientType.Victim],
+            "verify": [ut.ClientType.Victim, ut.ClientType.Admin, ut.ClientType.Hacker],
             "fetch_cmd": [ut.ClientType.Victim],
             "post_res": [ut.ClientType.Victim],
             "post_cmd": [ut.ClientType.Hacker],
-            "fetch_res": [ut.ClientType.Hacker]
+            "fetch_res": [ut.ClientType.Hacker],
+            "create_session": [ut.ClientType.Hacker]
         }
 
         self.server_cmds = {self.get_server_cmd_id(cmd): cmd for cmd in self.server_cmd_privileges}
@@ -84,6 +92,9 @@ class Config:
         # ---- IP and port
         self.port = self.get_port_ip("port", self.config.port, 8080)
         self.ip = self.get_port_ip("ip", self.config.ip, "0.0.0.0")
+
+        # ---- Debug flag
+        self.is_debug = self.config.debug
 
         # ---- Saving profile changes
         self.commit_profile()
@@ -170,11 +181,11 @@ class Config:
 
         return "".join(schema_lst)
 
-    def query_db(self, cur: sq.Cursor, query: str):
+    def query_db(self, cur: sq.Cursor, query: str, __params=None):
         """ Return all results that return from a database query provided by `query` and return None when`sqlite3.OperationalError` occurs """
         # Let's execute and handle the query
         try:
-            cur.execute(query)
+            cur.execute(query, __params if __params is not None else ())
             return cur.fetchall()
         except sq.Error:
             return None
@@ -284,6 +295,8 @@ class Config:
                             help="Server generated profile database used to re-initiate the server with the same profile as the previous.", default=None)
 
         parser.add_argument("--session-data", "-sd", type=Path, required=False, help="Server generated database used to resume the previous session's data.", default=None)
+
+        parser.add_argument("--debug", "-d", action="store_true", required=False, help="Run the server in debug mode.")
 
         parser.add_argument("--base-dir", "-b", type=Path, required=False, help="Directory where the server will store it's data.", default=Path("server_data"))
 
