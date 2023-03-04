@@ -4,7 +4,7 @@ data that is potentially useful for the server. """
 # --- the imports
 from reverse_shell import __app_name__, __version__
 from reverse_shell.server import ErrorCodes as ec
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace
 from pathlib import Path
 from typing import Any
 import json as js
@@ -13,7 +13,7 @@ import sqlite3 as sq
 
 
 class Config:
-    def __init__(self):
+    def __init__(self, config: Namespace):
         # ---- Schema
 
         # Required database schema for the session and data databases.
@@ -56,11 +56,11 @@ class Config:
 
         # A map of a victim with it's hacker that are in a live session
         # used to prevent multiple hackers hacking the same machine at once.
-        self.hacking_sessions = {
+        self.hacking_sessions: dict[str, str] = {
             # victim_id: hacker_id
         }
 
-        self.config = self.parse_arguments()
+        self.config = config
 
         # ---- Database initialization
         self.profile, self.profile_path = self.get_profile("profile.json")
@@ -157,7 +157,7 @@ class Config:
 
         # Set the profile to self.profile if not given
         if profile is None:
-            profile = self.profile
+            return self.profile.get(key, None)
 
         return profile.get(key, None)
 
@@ -308,95 +308,95 @@ class Config:
 
         return db
 
-    def parse_arguments(self):
-        """Argument parsing"""
-        parser = ArgumentParser(
-            prog=f"{__app_name__} server",
-            description=f"The server for the {__app_name__} project",
-            formatter_class=ArgumentDefaultsHelpFormatter,
-        )
 
-        parser.add_argument(
-            "--profile",
-            "-pf",
-            type=Path,
-            required=False,
-            help=(
-                "Server generated profile database used to re-initiate the server with"
-                " the same profile as the previous."
-            ),
-            default=None,
-        )
+def get_argument_parser():
+    """Argument parsing"""
+    parser = ArgumentParser(
+        prog=f"{__app_name__} server",
+        description=f"The server for the {__app_name__} project",
+        formatter_class=ArgumentDefaultsHelpFormatter,
+    )
 
-        parser.add_argument(
-            "--session-data",
-            "-sd",
-            type=Path,
-            required=False,
-            help=(
-                "Server generated database used to resume the previous session's data."
-            ),
-            default=None,
-        )
+    parser.add_argument(
+        "--profile",
+        "-pf",
+        type=Path,
+        required=False,
+        help=(
+            "Server generated profile database used to re-initiate the server with"
+            " the same profile as the previous."
+        ),
+        default=None,
+    )
 
-        parser.add_argument(
-            "--debug",
-            "-d",
-            action="store_true",
-            required=False,
-            help="Run the server in debug mode.",
-        )
+    parser.add_argument(
+        "--session-data",
+        "-sd",
+        type=Path,
+        required=False,
+        help=("Server generated database used to resume the previous session's data."),
+        default=None,
+    )
 
-        parser.add_argument(
-            "--base-dir",
-            "-b",
-            type=Path,
-            required=False,
-            help="Directory where the server will store it's data.",
-            default=Path("server_data"),
-        )
+    parser.add_argument(
+        "--debug",
+        "-d",
+        action="store_true",
+        required=False,
+        help="Run the server in debug mode.",
+    )
 
-        # NotImplemented yet, but will be soon
-        parser.add_argument(
-            "--pulse-check-frequency",
-            "-pcf",
-            required=False,
-            help=(
-                "Frequency of the server checking the status of the victims for their"
-                " status(online or offline)."
-            ),
-        )
+    parser.add_argument(
+        "--base-dir",
+        "-b",
+        type=Path,
+        required=False,
+        help="Directory where the server will store it's data.",
+        default=Path("server_data"),
+    )
 
-        parser.add_argument(
-            "-p",
-            "--port",
-            type=int,
-            required=False,
-            help="The port on which the server runs on, default=8080",
-            default=None,
-        )
+    # NotImplemented yet, but will be soon
+    parser.add_argument(
+        "--pulse-check-frequency",
+        "-pcf",
+        required=False,
+        help=(
+            "Frequency of the server checking the status of the victims for their"
+            " status(online or offline)."
+        ),
+    )
 
-        parser.add_argument(
-            "-i",
-            "--ip",
-            type=str,
-            required=False,
-            help=(
-                "The ip where the server is hosted on, default=0.0.0.0 i.e, all"
-                " interfaces"
-            ),
-            default=None,
-        )
+    parser.add_argument(
+        "-p",
+        "--port",
+        type=int,
+        required=False,
+        help="The port on which the server runs on, default=8080",
+        default=None,
+    )
 
-        parser.add_argument(
-            "--version",
-            "-v",
-            action="version",
-            version=f"{__app_name__} server v{__version__}",
-        )
+    parser.add_argument(
+        "-i",
+        "--ip",
+        type=str,
+        required=False,
+        help=(
+            "The ip where the server is hosted on, default=0.0.0.0 i.e, all"
+            " interfaces"
+        ),
+        default=None,
+    )
 
-        return parser.parse_args()
+    parser.add_argument(
+        "--version",
+        "-v",
+        action="version",
+        version=f"{__app_name__} server v{__version__}",
+    )
+
+    return parser
 
 
 if __name__ == "__main__":
-    config = Config()
+    config = get_argument_parser()
+    Config(config.parse_args())

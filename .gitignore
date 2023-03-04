@@ -133,3 +133,6 @@ server_data/
 
 # fake dll file created by victim
 ole32.dll
+
+# temporary files
+.tmp/
