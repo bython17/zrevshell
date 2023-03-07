@@ -1,15 +1,16 @@
 """ The reverse shell server and request handler. """
 
 # ---- imports
-import sys
-import reverse_shell.utils as ut
 import json as js
-from typing import Callable, Any
-from reverse_shell.server.config import Config, get_argument_parser
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from http import HTTPStatus, HTTPMethod
-from functools import partial
+import sys
 from binascii import Error as b64decodeError
+from functools import partial
+from http import HTTPMethod, HTTPStatus
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Any, Callable
+
+import reverse_shell.utils as ut
+from reverse_shell.server.config import Config, get_argument_parser
 
 
 class ZrevshellServer(BaseHTTPRequestHandler):
@@ -403,9 +404,9 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             return
 
         # Now let's check if the path(command) requested is available in this method
-        handler, req_method = self.server_command_functions[command]
+        handler, required_method = self.server_command_functions[command]
 
-        if req_method != method:
+        if required_method != method:
             # If this path(command) is not meant for this particular
             # method, then send a 404
             self.c_send_error(HTTPStatus.NOT_FOUND)
@@ -428,7 +429,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         self.main_handler(HTTPMethod.POST)
 
 
-def start_server(configuration: Config):
+def run_server(configuration: Config, httpd: HTTPServer | None = None):
     """Start the HTTP server"""
 
     # Getting the ip and port from the config
@@ -441,7 +442,8 @@ def start_server(configuration: Config):
 
     # Initiate the server
     ut.log("debug", f"Server is starting on ({ip}:{port})...")
-    httpd = HTTPServer((ip, port), zrevshell_server)
+    if httpd is None:
+        httpd = HTTPServer((ip, port), zrevshell_server)
     ut.log("success", "Server has successfully started!")
     # Means print an empty line, i think...
     print("\r")
@@ -504,7 +506,7 @@ def main():
     configuration = Config(parser.parse_args())
 
     # Let's rockin roll
-    start_server(configuration)
+    run_server(configuration)
 
 
 if __name__ == "__main__":

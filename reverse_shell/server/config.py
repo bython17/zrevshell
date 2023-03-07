@@ -1,19 +1,21 @@
 """ Accept and validate configuration, and facilitate and make ready any other
 data that is potentially useful for the server. """
 
+import json as js
+import sqlite3 as sq
+from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
+from pathlib import Path
+from typing import Any
+
+import reverse_shell.utils as ut
+
 # --- the imports
 from reverse_shell import __app_name__, __version__
 from reverse_shell.server import ErrorCodes as ec
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace
-from pathlib import Path
-from typing import Any
-import json as js
-import reverse_shell.utils as ut
-import sqlite3 as sq
 
 
 class Config:
-    def __init__(self, config: Namespace):
+    def __init__(self, config: Namespace, allow_multi_thread_db_access=False):
         # ---- Schema
 
         # Required database schema for the session and data databases.
@@ -53,6 +55,9 @@ class Config:
         )
         """,
         ]
+
+        # ---- MultiThreaded DB(mainly used for testing)
+        self.allow_multi_thread_db_access = allow_multi_thread_db_access
 
         # A map of a victim with it's hacker that are in a live session
         # used to prevent multiple hackers hacking the same machine at once.
@@ -265,7 +270,9 @@ class Config:
                     f"The file `{db_filepath}` doesn't exist.", ec.file_not_found
                 )
 
-        db = sq.connect(db_filepath)
+        db = sq.connect(
+            db_filepath, check_same_thread=not self.allow_multi_thread_db_access
+        )
         cur = db.cursor()
 
         # Let's now validate the database based on the db_schema argument

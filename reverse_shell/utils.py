@@ -1,11 +1,11 @@
-from pathlib import Path
+import base64
+import binascii
+import json
+import uuid
 from datetime import datetime
+from pathlib import Path
 from sys import exit
 from typing import Any
-import binascii
-import base64
-import uuid
-import json
 
 
 class ClientType:

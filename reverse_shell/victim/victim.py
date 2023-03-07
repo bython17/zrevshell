@@ -1,18 +1,20 @@
-import subprocess
-import platform
-import os
-import re
-import psutil
-import json
-import sys
 import argparse
-from reverse_shell import __app_name__, __version__
-from reverse_shell.victim import ErrorCodes
-import reverse_shell.utils as ut
+import json
+import os
+import platform
+import re
+import subprocess
+import sys
+from http import HTTPStatus
+from http.client import HTTPConnection
 from pathlib import Path
 from time import sleep
-from http.client import HTTPConnection
-from http import HTTPStatus
+
+import psutil
+
+import reverse_shell.utils as ut
+from reverse_shell import __app_name__, __version__
+from reverse_shell.victim import ErrorCodes
 
 
 class Victim:

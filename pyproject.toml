@@ -17,6 +17,7 @@ mypy = "^1.0.1"
 pytest = "^7.2.1"
 black = "^23.1.0"
 flake8 = "^6.0.0"
+isort = "^5.12.0"
 
 [tool.pytest.ini_options]
 testpaths = [
@@ -36,6 +37,9 @@ warn_return_any = true
 warn_unreachable = true
 warn_unused_configs = true
 no_implicit_reexport = true
+
+[tool.isort]
+profile = "black"
 
 [build-system]
 requires = ["poetry-core"]
