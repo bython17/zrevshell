@@ -124,8 +124,8 @@ def test_verify_basic(
         headers={
             **verified_client_header,
             "client-type": client_type.__str__(),
-            "hacker-token": f"{ut.encode_token(config.hacker_token)}",
-            "admin-token": f"{ut.encode_token(config.admin_token)}",
+            "hacker-token": ut.encode_token(config.hacker_token),
+            "admin-token": ut.encode_token(config.admin_token),
         },
     )
     # First let's check for the response_code
@@ -263,7 +263,7 @@ def test_create_session_with_invalid_victim(
     client.request(
         "POST",
         f"/{create_session_path}",
-        body=f"{ut.encode_token(victim_id)}",
+        body=ut.encode_token(victim_id),
         headers=verified_client_header,
     )
 
@@ -289,7 +289,7 @@ def test_create_session_with_victim_already_in_session(
     client.request(
         "POST",
         f"/{create_session_path}",
-        body=f"{ut.encode_token(victim_id)}",
+        body=ut.encode_token(victim_id),
         headers=verified_client_header,
     )
 
@@ -312,7 +312,7 @@ def test_create_session_properly(
     client.request(
         "POST",
         f"/{create_session_path}",
-        body=f"{ut.encode_token(victim_id)}",
+        body=ut.encode_token(victim_id),
         headers=verified_client_header,
     )
 
@@ -320,3 +320,106 @@ def test_create_session_properly(
 
     # Also check in the hacking_sessions table
     assert config.hacking_sessions.get(victim_id, None) is not None
+
+
+# ---------- Testing command 'post_cmd' ---------- #
+post_cmd_path = get_cmd_id("post_cmd")
+
+
+def test_post_cmd_with_invalid_victim(
+    client: HTTPConnection, db_cursor: Cursor, verified_client_header: dict[str, str]
+):
+    # That generally means no victim was ever created
+    hacker_id = verified_client_header["client-id"]
+    create_hacker(hacker_id, db_cursor)
+
+    request_body = js.dumps(
+        {
+            "victim_id": ut.generate_token(),  # A fake token(i.e that doesn't exist in the db)
+            "command": "whoami",
+        }
+    )
+
+    client.request(
+        "POST",
+        f"/{post_cmd_path}",
+        body=ut.encode_token(request_body),
+        headers=verified_client_header,
+    )
+
+    assert client.getresponse().status == st.EXPECTATION_FAILED
+
+
+def test_post_cmd_with_victim_in_session(
+    client: HTTPConnection, db_cursor: Cursor, verified_client_header: dict[str, str]
+):
+    # Let's create a hacker and a victim
+    hacker_id = verified_client_header["client-id"]
+    create_hacker(hacker_id, db_cursor)
+
+    victim_id = ut.generate_token()
+    create_victim(victim_id, db_cursor)
+
+    # Let's put the victim in session with supposedly another hacker
+    config.hacking_sessions[victim_id] = ut.generate_token()
+
+    request_body = js.dumps({"victim_id": victim_id, "command": "whoami"})
+
+    client.request(
+        "POST",
+        f"/{post_cmd_path}",
+        body=ut.encode_token(request_body),
+        headers=verified_client_header,
+    )
+
+    assert client.getresponse().status == st.FORBIDDEN
+
+
+def test_create_post_cmd_without_body(
+    client: HTTPConnection,
+    db_cursor: Cursor,
+    verified_client_header: dict[str, str],
+):
+    # Create victim and hacker
+    hacker_id = verified_client_header["client-id"]
+    create_hacker(hacker_id, db_cursor)
+
+    victim_id = ut.generate_token()
+    create_victim(victim_id, db_cursor)
+
+    # Let's put the hacker in session with the victim
+    config.hacking_sessions[victim_id] = hacker_id
+
+    client.request(
+        "POST",
+        f"/{post_cmd_path}",
+        body="",
+        headers=verified_client_header,
+    )
+
+    assert client.getresponse().status == st.BAD_REQUEST
+
+
+def test_create_post_cmd_properly(
+    client: HTTPConnection, db_cursor: Cursor, verified_client_header: dict[str, str]
+):
+    # Create the victim and the hacker
+    hacker_id = verified_client_header["client-id"]
+    create_hacker(hacker_id, db_cursor)
+
+    victim_id = ut.generate_token()
+    create_victim(victim_id, db_cursor)
+
+    # putting the hacker in session with the victim
+    config.hacking_sessions[victim_id] = hacker_id
+
+    request_body = js.dumps({"victim_id": victim_id, "command": "whoami"})
+
+    client.request(
+        "POST",
+        f"/{post_cmd_path}",
+        body=ut.encode_token(request_body),
+        headers=verified_client_header,
+    )
+
+    assert client.getresponse().status == st.CREATED
