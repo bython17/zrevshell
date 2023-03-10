@@ -25,6 +25,40 @@ def db_cursor():
         db_cursor.execute(f"DELETE FROM {tbl_name}")
 
 
+# Some helper functions
+def create_hacker(hacker_id: str, db_cursor: Cursor):
+    db_cursor.execute(
+        "INSERT INTO clients VALUES(?, ?, 1)", (hacker_id, ut.ClientType.Hacker)
+    )
+
+
+def create_victim(
+    victim_id: str,
+    db_cursor: Cursor,
+    victim_info: tuple[str | None, str | None, str | None, str | None, str | None] = (
+        None,
+        None,
+        None,
+        None,
+        None,
+    ),
+):
+    db_cursor.execute(
+        "INSERT INTO clients VALUES(?, ?, 1)", (victim_id, ut.ClientType.Victim)
+    )
+    db_cursor.execute(
+        "INSERT INTO victim_info VALUES(?, ?, ?, ?, ?, ?)",
+        (victim_id, *victim_info),
+    )
+
+
+def get_cmd_id(command_name: str):
+    """Make sure you know the command exists and is unique to get proper results."""
+    return [key for key, value in config.server_cmds.items() if value == command_name][
+        0
+    ]
+
+
 @pytest.mark.parametrize(
     "headers, res_code",
     [
@@ -68,9 +102,7 @@ def verified_client_header():
 
 # ---------- Testing command 'verify' ---------- #
 # This command's path
-verify_cmd_path = [
-    key for key, value in config.server_cmds.items() if value == "verify"
-][0]
+verify_cmd_path = get_cmd_id("verify")
 
 
 @pytest.mark.parametrize(
@@ -172,3 +204,119 @@ def test_verify_victim_with_body(
         result = db_cursor.fetchone()
         assert result is not None
         assert req_body[result[0]] == val
+
+
+def test_verify_when_victim_exists(
+    client: HTTPConnection, verified_client_header, db_cursor: Cursor
+):
+    # Insert a client directly to the database and test if
+    # request verify with the same client id yields a conflict status
+    # we'll use client type victim cuz changing client types now doesn't
+    # make a difference now.
+
+    client_id = verified_client_header["client-id"]
+    # Create sample victim
+    create_victim(client_id, db_cursor)
+
+    # Now let's check if the requests yield a conflict response
+    client.request(
+        "POST",
+        f"/{verify_cmd_path}",
+        headers={
+            **verified_client_header,
+            "client-type": ut.ClientType.Victim.__str__(),
+        },
+    )
+
+    assert client.getresponse().status == st.CONFLICT
+
+
+# ---------- Testing command 'create_session' ---------- #
+create_session_path = get_cmd_id("create_session")
+
+
+def test_create_session_without_body(
+    client: HTTPConnection,
+    db_cursor: Cursor,
+    verified_client_header: dict[str, str],
+):
+    hacker_id = verified_client_header["client-id"]
+    # Create a sample hacker because we need to use it.
+    create_hacker(hacker_id, db_cursor)
+
+    client.request("POST", f"/{create_session_path}", headers=verified_client_header)
+
+    assert client.getresponse().status == st.BAD_REQUEST
+
+
+def test_create_session_with_invalid_victim(
+    client: HTTPConnection,
+    db_cursor: Cursor,
+    verified_client_header: dict[str, str],
+):
+    victim_id = ut.generate_token()
+
+    hacker_id = verified_client_header["client-id"]
+    # Create a sample hacker because we need to use it.
+    create_hacker(hacker_id, db_cursor)
+
+    client.request(
+        "POST",
+        f"/{create_session_path}",
+        body=f"{ut.encode_token(victim_id)}",
+        headers=verified_client_header,
+    )
+
+    assert client.getresponse().status == st.BAD_REQUEST
+
+
+def test_create_session_with_victim_already_in_session(
+    client: HTTPConnection,
+    db_cursor: Cursor,
+    verified_client_header: dict[str, str],
+):
+    # Create sample victim
+    victim_id = ut.generate_token()
+    create_victim(victim_id, db_cursor)
+
+    hacker_id = verified_client_header["client-id"]
+    # Create a sample hacker because we need to use it.
+    create_hacker(hacker_id, db_cursor)
+
+    # faking a session with a hacker for the victim
+    config.hacking_sessions[victim_id] = ut.generate_token()
+
+    client.request(
+        "POST",
+        f"/{create_session_path}",
+        body=f"{ut.encode_token(victim_id)}",
+        headers=verified_client_header,
+    )
+
+    assert client.getresponse().status == st.FORBIDDEN
+
+
+def test_create_session_properly(
+    client: HTTPConnection,
+    db_cursor: Cursor,
+    verified_client_header: dict[str, str],
+):
+    # Create sample victim
+    victim_id = ut.generate_token()
+    create_victim(victim_id, db_cursor)
+
+    hacker_id = verified_client_header["client-id"]
+    # Create a sample hacker because we need to use it.
+    create_hacker(hacker_id, db_cursor)
+
+    client.request(
+        "POST",
+        f"/{create_session_path}",
+        body=f"{ut.encode_token(victim_id)}",
+        headers=verified_client_header,
+    )
+
+    assert client.getresponse().status == st.OK
+
+    # Also check in the hacking_sessions table
+    assert config.hacking_sessions.get(victim_id, None) is not None
