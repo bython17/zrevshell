@@ -3,8 +3,8 @@ from http import HTTPStatus as st
 from http.client import HTTPConnection
 from sqlite3 import Cursor
 
+import helper as hp
 import pytest
-from configuration import configuration as config
 
 import reverse_shell.utils as ut
 
@@ -12,7 +12,7 @@ import reverse_shell.utils as ut
 @pytest.fixture(scope="function")
 def db_cursor():
     # yields the database cursor and erases all data after the test finishes
-    db_cursor = config.session_data_db.cursor()
+    db_cursor = hp.database.session_data.cursor()
     yield db_cursor
     # ---------- The tear down
     # First get all the table names from the database
@@ -54,9 +54,9 @@ def create_victim(
 
 def get_cmd_id(command_name: str):
     """Make sure you know the command exists and is unique to get proper results."""
-    return [key for key, value in config.server_cmds.items() if value == command_name][
-        0
-    ]
+    return [
+        key for key, value in hp.config.server_cmds.items() if value == command_name
+    ][0]
 
 
 @pytest.mark.parametrize(
@@ -64,7 +64,7 @@ def get_cmd_id(command_name: str):
     [
         ({}, st.BAD_REQUEST),
         (
-            {"Authorization": f"Basic {ut.encode_token(config.auth_token)}"},
+            {"Authorization": f"Basic {ut.encode_token(hp.config.auth_token)}"},
             st.BAD_REQUEST,
         ),
         (
@@ -77,7 +77,7 @@ def get_cmd_id(command_name: str):
         ({"client-id": ut.generate_token()}, st.UNAUTHORIZED),
         (
             {
-                "Authorization": f"Basic {ut.encode_token(config.auth_token)}",
+                "Authorization": f"Basic {ut.encode_token(hp.config.auth_token)}",
                 "client-id": ut.generate_token(),
             },
             st.OK,
@@ -95,7 +95,7 @@ def test_check_verified_request(
 @pytest.fixture
 def verified_client_header():
     return {
-        "Authorization": f"Basic {ut.encode_token(config.auth_token)}",
+        "Authorization": f"Basic {ut.encode_token(hp.config.auth_token)}",
         "client-id": ut.generate_token(),
     }
 
@@ -124,8 +124,8 @@ def test_verify_basic(
         headers={
             **verified_client_header,
             "client-type": client_type.__str__(),
-            "hacker-token": ut.encode_token(config.hacker_token),
-            "admin-token": ut.encode_token(config.admin_token),
+            "hacker-token": ut.encode_token(hp.config.hacker_token),
+            "admin-token": ut.encode_token(hp.config.admin_token),
         },
     )
     # First let's check for the response_code
@@ -284,7 +284,7 @@ def test_create_session_with_victim_already_in_session(
     create_hacker(hacker_id, db_cursor)
 
     # faking a session with a hacker for the victim
-    config.hacking_sessions[victim_id] = ut.generate_token()
+    hp.live_data.hacking_sessions[victim_id] = ut.generate_token()
 
     client.request(
         "POST",
@@ -319,7 +319,7 @@ def test_create_session_properly(
     assert client.getresponse().status == st.OK
 
     # Also check in the hacking_sessions table
-    assert config.hacking_sessions.get(victim_id, None) is not None
+    assert hp.live_data.hacking_sessions.get(victim_id, None) is not None
 
 
 # ---------- Testing command 'post_cmd' ---------- #
@@ -361,7 +361,7 @@ def test_post_cmd_with_victim_in_session(
     create_victim(victim_id, db_cursor)
 
     # Let's put the victim in session with supposedly another hacker
-    config.hacking_sessions[victim_id] = ut.generate_token()
+    hp.live_data.hacking_sessions[victim_id] = ut.generate_token()
 
     request_body = js.dumps({"victim_id": victim_id, "command": "whoami"})
 
@@ -375,7 +375,7 @@ def test_post_cmd_with_victim_in_session(
     assert client.getresponse().status == st.FORBIDDEN
 
 
-def test_create_post_cmd_without_body(
+def test_post_cmd_without_body(
     client: HTTPConnection,
     db_cursor: Cursor,
     verified_client_header: dict[str, str],
@@ -388,7 +388,7 @@ def test_create_post_cmd_without_body(
     create_victim(victim_id, db_cursor)
 
     # Let's put the hacker in session with the victim
-    config.hacking_sessions[victim_id] = hacker_id
+    hp.live_data.hacking_sessions[victim_id] = hacker_id
 
     client.request(
         "POST",
@@ -400,7 +400,7 @@ def test_create_post_cmd_without_body(
     assert client.getresponse().status == st.BAD_REQUEST
 
 
-def test_create_post_cmd_properly(
+def test_post_cmd_properly(
     client: HTTPConnection, db_cursor: Cursor, verified_client_header: dict[str, str]
 ):
     # Create the victim and the hacker
@@ -411,7 +411,7 @@ def test_create_post_cmd_properly(
     create_victim(victim_id, db_cursor)
 
     # putting the hacker in session with the victim
-    config.hacking_sessions[victim_id] = hacker_id
+    hp.live_data.hacking_sessions[victim_id] = hacker_id
 
     request_body = js.dumps({"victim_id": victim_id, "command": "whoami"})
 
@@ -423,3 +423,11 @@ def test_create_post_cmd_properly(
     )
 
     assert client.getresponse().status == st.CREATED
+
+
+# ---------- Test 'post_res' command ---------- #
+post_res_path = get_cmd_id("post_res")
+
+
+def test_post_res_():
+    pass
