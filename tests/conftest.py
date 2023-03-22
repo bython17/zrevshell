@@ -11,7 +11,7 @@ from reverse_shell.server import server
 def start_server():
     # let's run the server with another thread, and using the configuration and live data
     server_thread = Thread(
-        target=server.run_server, args=(hp.config, hp.live_data), daemon=True
+        target=server.run_server, args=(hp.config, hp.sessions), daemon=True
     )
     server_thread.start()
 

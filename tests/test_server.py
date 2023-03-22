@@ -284,7 +284,7 @@ def test_create_session_with_victim_already_in_session(
     create_hacker(hacker_id, db_cursor)
 
     # faking a session with a hacker for the victim
-    hp.live_data.hacking_sessions[victim_id] = ut.generate_token()
+    hp.sessions.add_session(hacker_id, victim_id)
 
     client.request(
         "POST",
@@ -319,14 +319,14 @@ def test_create_session_properly(
     assert client.getresponse().status == st.OK
 
     # Also check in the hacking_sessions table
-    assert hp.live_data.hacking_sessions.get(victim_id, None) is not None
+    assert hp.sessions.check_client_in_session(victim_id)
 
 
 # ---------- Testing command 'post_cmd' ---------- #
 post_cmd_path = get_cmd_id("post_cmd")
 
 
-def test_post_cmd_with_invalid_victim(
+def test_post_cmd_with_dead_session(
     client: HTTPConnection, db_cursor: Cursor, verified_client_header: dict[str, str]
 ):
     # That generally means no victim was ever created
@@ -335,7 +335,7 @@ def test_post_cmd_with_invalid_victim(
 
     request_body = js.dumps(
         {
-            "victim_id": ut.generate_token(),  # A fake token(i.e that doesn't exist in the db)
+            "session_id": ut.generate_token(),  # A fake token(i.e the session isn't running)
             "command": "whoami",
         }
     )
@@ -347,7 +347,7 @@ def test_post_cmd_with_invalid_victim(
         headers=verified_client_header,
     )
 
-    assert client.getresponse().status == st.EXPECTATION_FAILED
+    assert client.getresponse().status == st.FORBIDDEN
 
 
 def test_post_cmd_with_victim_in_session(
@@ -361,9 +361,9 @@ def test_post_cmd_with_victim_in_session(
     create_victim(victim_id, db_cursor)
 
     # Let's put the victim in session with supposedly another hacker
-    hp.live_data.hacking_sessions[victim_id] = ut.generate_token()
+    session_id = hp.sessions.add_session(ut.generate_token(), victim_id)
 
-    request_body = js.dumps({"victim_id": victim_id, "command": "whoami"})
+    request_body = js.dumps({"session_id": session_id, "command": "whoami"})
 
     client.request(
         "POST",
@@ -388,7 +388,7 @@ def test_post_cmd_without_body(
     create_victim(victim_id, db_cursor)
 
     # Let's put the hacker in session with the victim
-    hp.live_data.hacking_sessions[victim_id] = hacker_id
+    hp.sessions.add_session(hacker_id, victim_id)
 
     client.request(
         "POST",
@@ -411,9 +411,9 @@ def test_post_cmd_properly(
     create_victim(victim_id, db_cursor)
 
     # putting the hacker in session with the victim
-    hp.live_data.hacking_sessions[victim_id] = hacker_id
+    session_id = hp.sessions.add_session(hacker_id, victim_id)
 
-    request_body = js.dumps({"victim_id": victim_id, "command": "whoami"})
+    request_body = js.dumps({"session_id": session_id, "command": "whoami"})
 
     client.request(
         "POST",
