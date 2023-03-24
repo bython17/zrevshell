@@ -1,51 +1,115 @@
-import socket
-import reverse_shell.consts as ct
+import base64
+import binascii
+import json
+import uuid
+from datetime import datetime
+from pathlib import Path
+from sys import exit
+from typing import Any
+
+
+class ClientType:
+    """Used to distinguish between the 3 client types. Use each field to represent the corresponding client type."""
+
+    # We didn't use Enum, because Enums are not JSON serializable.
+    # Plain numbers are fine since we don't care about the values
+    Hacker = 1
+    Victim = 2
+    Admin = 3
 
 
 def log(focus_message: str, description):
     print(f"[{focus_message.upper()}] {description}")
 
 
-def send_message(message: str, sock: socket.socket):
-    message_length = len(message)  # this is the length of the message we are going to send
-    # Now we need to add white spaces to the message_length in order to make it fit to the HEADER_SIZE
-    message_length = f"{message_length:<{ct.HEADER_SIZE}}"  # here what i did was just adding white spaces to the message_length.
-    sock.send(message_length.encode(ct.ENCODING))  # then send that to the server or client
-
-    # Now let's send the actual message which is simple
-    sock.send(message.encode(ct.ENCODING))
+def get_formatted_time():
+    """Returns the current time using YYYY-MM-DD-HH-MM-SS"""
+    current_time = str(datetime.now())
+    current_time = current_time.replace(":", "-").replace(" ", "-")
+    current_time = current_time.split(".")[0]
+    return current_time
 
 
-def receive_message(sock: socket.socket):
-    message_length = sock.recv(ct.HEADER_SIZE).decode(ct.ENCODING)
+def write_blank_json(file_path: Path, bytes=False, encoding="utf-8"):
+    """Write a blank json text i.e `{}` into a json file"""
+    if bytes:
+        file_path.write_bytes("{}".encode(encoding))
+    else:
+        file_path.write_text("{}", encoding=encoding)
 
-    if not message_length:
-        return None
 
-    message_length = int(message_length)
+def write_json(file_path: Path, data: dict[Any, Any], bytes=False, encoding="utf-8"):
+    """Write a stringified python dictionary to the file_path"""
+    if not bytes:
+        json.dump(data, file_path.open("w"), indent=2)
+    else:
+        file_path.write_bytes(json.dumps(data).encode(encoding))
 
-    if message_length <= 16:
-        return sock.recv(message_length).decode(ct.ENCODING)
 
-    full_message = ""
+def read_json(file_path: Path, bytes=False, encoding="utf-8"):
+    """Read from the `file_path` and return a python dictionary."""
+    if not bytes:
+        if not file_path.is_file():
+            write_blank_json(file_path)
+        return json.loads(file_path.read_text())
+    else:
+        if not file_path.is_file():
+            write_blank_json(file_path, bytes=True, encoding=encoding)
+        return json.loads(file_path.read_bytes().decode(encoding))
 
-    ################ Nython's Logic##########################
-    # while message_length > 16:
-    #     message_part = sock.recv(16).decode(ct.ENCODING)
-    #     full_message += message_part
-    #     message_length -= 16
 
-    # if message_length:
-    #     full_message += sock.recv(message_length).decode(ct.ENCODING)
-    #######################################################
+def encode_token(token: str):
+    """Encode a string to base64 then decode it to string."""
+    random_encoded_bytes = token.encode("ascii")
+    base64_encoded_bytes = base64.b64encode(random_encoded_bytes)
+    return base64_encoded_bytes.decode("ascii")
 
-    ############### Bython's Logic##########################
-    receive_sizes = [16] * (message_length // 16)
-    receive_sizes.append(message_length % 16)
 
-    for receive_size in receive_sizes:
-        part_message = sock.recv(receive_size).decode(ct.ENCODING)
-        full_message += part_message
-    #####################################################
+def decode_token(token: str | bytes):
+    """Decode a base64 encoded byte that has been decoded to a string or
+    an original base64."""
+    if isinstance(token, str):
+        token = token.encode("ascii")
+    b64_decoded_bytes = base64.b64decode(token)
+    return b64_decoded_bytes.decode("ascii")
 
-    return full_message
+
+def generate_token():
+    """Generate a new token"""
+    random_uuid = uuid.uuid4()
+    return str(random_uuid).replace("-", "")
+
+
+def error_exit(msg: str, code: int):
+    log("error", msg)
+    exit(code)
+
+
+def get_id(file_path: Path):
+    """Get an ID for the client(either victim or hacker) and generate a new one
+    if the client's data file gets lost."""
+    # get the ID of the client from our super secret file
+
+    # We can't use the read_json since we need
+    # decode the string before json loading it
+    if not file_path.is_file():
+        write_blank_json(file_path, bytes=True, encoding="ascii")
+
+    encoded_data = file_path.read_bytes()
+
+    try:
+        data = json.loads(decode_token(encoded_data))
+    except (json.JSONDecodeError, KeyError, binascii.Error):
+        write_blank_json(file_path, bytes=True, encoding="ascii")
+        data = {}
+
+    if "client_id" not in data:
+        data["client_id"] = generate_token()
+
+    client_id = data["client_id"]
+    # We also cant use the write_json since we need
+    # to encode with b64 before writing
+    data = encode_token(json.dumps(data))
+    file_path.write_bytes(data.encode("ascii"))
+
+    return client_id

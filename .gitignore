@@ -128,5 +128,11 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# For the tmp files in .tmp
+# Ignore all server generated files
+server_data/
+
+# fake dll file created by victim
+ole32.dll
+
+# temporary files
 .tmp/
