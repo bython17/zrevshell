@@ -473,9 +473,47 @@ def test_post_cmd_properly(
     assert client.getresponse().status == st.CREATED
 
 
-# ---------- Test 'post_res' command ---------- #
-post_res_path = get_cmd_id(ut.ServerCommands.post_res)
+# ---------- Testing command "get_session" ---------- #
+get_session_path = get_cmd_id(ut.ServerCommands.get_session)
 
 
-def test_post_res_():
-    pass
+def test_get_session_without_a_session(
+    client: HTTPConnection, db_cursor: Cursor, verified_client_header: dict[str, str]
+):
+    client_id = verified_client_header["client-id"]
+    create_victim(client_id, db_cursor)
+
+    # Let's request to get a session even though we are not
+    # in one
+    client.request("GET", f"/{get_session_path}", headers=verified_client_header)
+
+    assert client.getresponse().status == st.NOT_FOUND
+
+
+def test_get_session_with_a_session(
+    client: HTTPConnection, db_cursor: Cursor, verified_client_header: dict[str, str]
+):
+    client_id = verified_client_header["client-id"]
+    create_victim(client_id, db_cursor)
+
+    # Let's put the victim in a session with the hacker(well a fake one)
+    session_id = hp.sessions.add_session(client_id, ut.generate_token())
+
+    client.request("GET", f"/{get_session_path}", headers=verified_client_header)
+
+    response = client.getresponse()
+
+    # Check if the status code was right
+    assert response.status == st.OK
+
+    # And now if the session_id is correct
+    content_length = response.getheader("content-length")
+
+    # Check it false if the content length doesn't even exist
+    if content_length is None:
+        assert False
+
+    server_sent_session_id = response.read(int(content_length)).decode()
+    server_sent_session_id = ut.decode_token(server_sent_session_id)
+
+    assert session_id == server_sent_session_id
