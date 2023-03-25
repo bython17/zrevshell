@@ -13,9 +13,21 @@ class ClientType:
 
     # We didn't use Enum, because Enums are not JSON serializable.
     # Plain numbers are fine since we don't care about the values
-    Hacker = 1
-    Victim = 2
-    Admin = 3
+    hacker = 1
+    victim = 2
+    admin = 3
+
+
+class ServerCommands:
+    """Used to define the string representation of the server commands. just for avoiding the use of literals."""
+
+    register = "register"
+    fetch_cmd = "fetch_cmd"
+    post_res = "post_res"
+    post_cmd = "post_cmd"
+    fetch_res = "fetch_res"
+    create_session = "create_session"
+    get_session = "get_session"
 
 
 def log(focus_message: str, description):

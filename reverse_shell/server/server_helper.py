@@ -354,12 +354,19 @@ class Config:
         # to each command.
 
         self.server_cmd_privileges = {
-            "verify": [ut.ClientType.Victim, ut.ClientType.Admin, ut.ClientType.Hacker],
-            "fetch_cmd": [ut.ClientType.Victim, ut.ClientType.Admin],
-            "post_res": [ut.ClientType.Victim, ut.ClientType.Admin],
-            "post_cmd": [ut.ClientType.Hacker, ut.ClientType.Admin],
-            "fetch_res": [ut.ClientType.Hacker, ut.ClientType.Admin],
-            "create_session": [ut.ClientType.Hacker, ut.ClientType.Admin],
+            ut.ServerCommands.register: [
+                ut.ClientType.victim,
+                ut.ClientType.admin,
+                ut.ClientType.hacker,
+            ],
+            ut.ServerCommands.fetch_cmd: [ut.ClientType.victim, ut.ClientType.admin],
+            ut.ServerCommands.post_res: [ut.ClientType.victim, ut.ClientType.admin],
+            ut.ServerCommands.post_cmd: [ut.ClientType.hacker, ut.ClientType.admin],
+            ut.ServerCommands.fetch_res: [ut.ClientType.hacker, ut.ClientType.admin],
+            ut.ServerCommands.create_session: [
+                ut.ClientType.hacker,
+                ut.ClientType.admin,
+            ],
         }
 
         self.server_cmds = {
