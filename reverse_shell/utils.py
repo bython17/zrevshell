@@ -77,7 +77,7 @@ def encode_token(token: str):
     return base64_encoded_bytes.decode("ascii")
 
 
-def decode_token(token: str | bytes):
+def decode_token(token: str | bytes) -> str:
     """Decode a base64 encoded byte that has been decoded to a string or
     an original base64."""
     if isinstance(token, str):

