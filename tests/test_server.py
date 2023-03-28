@@ -395,7 +395,7 @@ def test_post_cmd_with_dead_session(
         headers=verified_hacker_header,
     )
 
-    assert client.getresponse().status == st.NOT_FOUND
+    assert client.getresponse().status == st.NOT_ACCEPTABLE
 
 
 def test_post_cmd_with_victim_in_session(
@@ -420,7 +420,7 @@ def test_post_cmd_with_victim_in_session(
         headers=verified_hacker_header,
     )
 
-    assert client.getresponse().status == st.BAD_REQUEST
+    assert client.getresponse().status == st.NOT_ACCEPTABLE
 
 
 def test_post_cmd_with_victim_in_other_session_and_hacker_in_another(
@@ -447,7 +447,7 @@ def test_post_cmd_with_victim_in_other_session_and_hacker_in_another(
         headers=verified_hacker_header,
     )
 
-    assert client.getresponse().status == st.FORBIDDEN
+    assert client.getresponse().status == st.NOT_ACCEPTABLE
 
 
 def test_post_cmd_without_body(
@@ -584,7 +584,7 @@ def test_fetch_cmd_with_a_fake_session(
         body=fake_session_id,
     )
 
-    assert client.getresponse().status == st.NOT_FOUND
+    assert client.getresponse().status == st.NOT_ACCEPTABLE
 
 
 def test_fetch_cmd_in_a_session_but_with_an_empty_command(
@@ -677,7 +677,7 @@ def test_post_res_with_dead_session(
         headers=verified_client_header,
     )
 
-    assert client.getresponse().status == st.NOT_FOUND
+    assert client.getresponse().status == st.NOT_ACCEPTABLE
 
 
 def test_post_res_using_a_session_id_belonging_to_another_session(
@@ -708,7 +708,7 @@ def test_post_res_using_a_session_id_belonging_to_another_session(
         headers=verified_client_header,
     )
 
-    assert client.getresponse().status == st.FORBIDDEN
+    assert client.getresponse().status == st.NOT_ACCEPTABLE
 
 
 def test_post_res_without_providing_the_body(
@@ -779,3 +779,87 @@ def test_post_res_properly(
     remote_res = hp.sessions.get_response(session_id)[0]
 
     assert remote_res == res
+
+
+# ---------- Testing command 'fetch_res' ---------- #
+fetch_res_path = get_cmd_id(ut.ServerCommands.fetch_res)
+
+
+def test_fetch_res_without_providing_session_id(
+    client: HTTPConnection, db_cursor: Cursor, verified_hacker_header: dict[str, str]
+):
+    # Ok first create the hacker and then request the server
+    # for fetching a response which should respond as bad_request since
+    # we don't even provide the body needed
+
+    hacker_id = verified_hacker_header["client-id"]
+    create_hacker(hacker_id, db_cursor)
+
+    client.request("GET", f"/{fetch_res_path}", headers=verified_hacker_header)
+
+    assert client.getresponse().status == st.BAD_REQUEST
+
+
+def test_fetch_res_with_invalid_sessions(
+    client: HTTPConnection, db_cursor: Cursor, verified_hacker_header: dict[str, str]
+):
+    # Now we need to request the server with a session_id that doesn't
+    # exist.
+
+    hacker_id = verified_hacker_header["client-id"]
+    create_hacker(hacker_id, db_cursor)
+
+    fake_session_id = ut.generate_token()
+
+    client.request(
+        "GET",
+        f"/{fetch_res_path}",
+        body=ut.encode_token(fake_session_id),
+        headers=verified_hacker_header,
+    )
+
+    assert client.getresponse().status == st.NOT_ACCEPTABLE
+
+
+def test_fetch_res_with_a_valid_session_that_the_hacker_is_not_in(
+    client: HTTPConnection, db_cursor: Cursor, verified_hacker_header: dict[str, str]
+):
+    # And now we need to test send a request with a session_id
+    # occupied by some one else.
+
+    hacker_id = verified_hacker_header["client-id"]
+    create_hacker(hacker_id, db_cursor)
+
+    other_session = hp.sessions.add_session(ut.generate_token(), ut.generate_token())
+    # putting our selves in session to bypass the session check
+    hp.sessions.add_session(hacker_id, ut.generate_token())
+
+    client.request(
+        "GET",
+        f"/{fetch_res_path}",
+        body=ut.encode_token(other_session),
+        headers=verified_hacker_header,
+    )
+
+    assert client.getresponse().status == st.NOT_ACCEPTABLE
+
+
+def test_fetch_res_when_the_hacker_is_not_in_a_session(
+    client: HTTPConnection, db_cursor: Cursor, verified_hacker_header: dict[str, str]
+):
+    # Now we need to request the server while we're not in session
+    # this should result in a bad_request
+
+    hacker_id = verified_hacker_header["client-id"]
+    create_hacker(hacker_id, db_cursor)
+
+    other_session = hp.sessions.add_session(ut.generate_token(), ut.generate_token())
+
+    client.request(
+        "GET",
+        f"/{fetch_res_path}",
+        body=ut.encode_token(other_session),
+        headers=verified_hacker_header,
+    )
+
+    assert client.getresponse().status == st.NOT_ACCEPTABLE
