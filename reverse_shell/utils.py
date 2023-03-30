@@ -28,6 +28,9 @@ class ServerCommands:
     fetch_res = "fetch_res"
     create_session = "create_session"
     get_session = "get_session"
+    list_victims = "list_victims"
+    exit_session = "exit_session"
+    delete_hacker = "delete_hacker"
 
 
 def log(focus_message: str, description):

