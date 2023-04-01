@@ -27,6 +27,21 @@ class SessionKeys(TypedDict):
     alive: bool
 
 
+class SessionDoesNotExist(Exception):
+    """Exception raised if session doesn't exist."""
+
+    def __init__(self, session_id: str):
+        self.message = f"The session `{session_id}` doesn't exist"
+        super().__init__(self.message)
+
+
+class ClientAlreadyInSession(Exception):
+    """Exception raised if the client is already in a session"""
+
+    def __init__(self, client_id: str):
+        self.message = f"The client `{client_id}` is already in a session."
+
+
 class Database:
     def __init__(
         self, db_path: Path | None, base_dir: Path, allow_multithreaded_db: bool = False
@@ -210,10 +225,11 @@ class Sessions:
     def add_session(self, hacker_id: str, victim_id: str):
         """Create a new session based on the hacker and victim id provided."""
         # First check if either the hacker or the hacker are already in  a session.
-        if self.check_client_in_session(hacker_id) or self.check_client_in_session(
-            victim_id
-        ):
-            raise Exception("Either the hacker or victim provided are in a session")
+        if self.check_client_in_session(hacker_id):
+            raise ClientAlreadyInSession(hacker_id)
+
+        if self.check_client_in_session(victim_id):
+            raise ClientAlreadyInSession(victim_id)
 
         # Creating the session id
         session_id = ut.generate_token()
@@ -237,33 +253,50 @@ class Sessions:
     def kill_session(self, session_id: str):
         """Deactivate the given session"""
         # Make sure the session exists before activation
-        if not self.check_session_active(session_id):
-            raise Exception("session doesn't exist")
+        if not self.check_session_exists(session_id):
+            raise SessionDoesNotExist(session_id)
 
         # Let's deactivate the session
         self._sessions[session_id]["alive"] = False
-        # and let's remove the client's from the client_list
-        # to allow them to connect to more sessions after this
+
+    def edit_session(
+        self,
+        session_id: str,
+        hacker_id: Optional[str] = None,
+        victim_id: Optional[str] = None,
+    ):
+        """Edit the session, change the hacker_id and victim_id properties.
+        if you don't want to change a session_id leave it set to None."""
+        # Session sanity check
+        if not self.check_session_exists(session_id):
+            raise SessionDoesNotExist(session_id)
+
+        # Now if the session does exist, it's just a matter of simple
+        # if conditions
+        if hacker_id is not None:
+            self._sessions[session_id]["hacker_id"] = hacker_id
+        if victim_id is not None:
+            self._sessions[session_id]["victim_id"] = victim_id
 
     def check_session_alive(self, session_id: str):
         """Check if the given session is alive"""
         # first check if the session exists
-        if not self.check_session_active(session_id):
-            raise Exception("session does not exist")
+        if not self.check_session_exists(session_id):
+            raise SessionDoesNotExist(session_id)
 
         return self._sessions[session_id]["alive"]
 
     def remove_session(self, session_id: str):
         """Remove the session based on the session id."""
         # First check if the session exists
-        if not self.check_session_active(session_id):
-            raise Exception(f"The session_id: `{session_id}` doesn't exist")
+        if not self.check_session_exists(session_id):
+            raise SessionDoesNotExist(session_id)
 
         # Now let's fetch the hacker and victim with that session_id
         hacker_victim_ids = self._sessions[session_id]
 
         # Removing them from the client_list list
-        for client_id in hacker_victim_ids.values():
+        for client_id in list(hacker_victim_ids.values())[:1]:
             self._client_list.remove(client_id)
 
         del self._session_communications[session_id]
@@ -272,8 +305,8 @@ class Sessions:
     def get_session(self, session_id: str):
         """Get the session i.e the hacker and victim inside it using the session_id."""
         # First check if the session is up and running
-        if not self.check_session_active(session_id):
-            raise KeyError("The specified could not be found.")
+        if not self.check_session_exists(session_id):
+            raise SessionDoesNotExist(session_id)
 
         return self._sessions[session_id]
 
@@ -293,8 +326,8 @@ class Sessions:
     def insert_command(self, session_id: str, cmd: str):
         """Insert a new in the session provided"""
         # First let's see if the session is active
-        if not self.check_session_active(session_id):
-            raise Exception("Given session_id isn't active.")
+        if not self.check_session_exists(session_id):
+            raise SessionDoesNotExist(session_id)
 
         # Now let's insert the command inside the session
         self._session_communications[session_id]["command"] = cmd
@@ -302,16 +335,16 @@ class Sessions:
     def insert_response(self, session_id: str, res: str):
         """Add the response given in the responses list."""
         # As always first check if the session is active
-        if not self.check_session_active(session_id):
-            raise Exception("Given session_id isn't active")
+        if not self.check_session_exists(session_id):
+            raise SessionDoesNotExist(session_id)
 
         # Now append the response in the list of responses
         self._session_communications[session_id]["responses"].append(res)
 
     def get_command(self, session_id: str):
         """Fetch the command from the communications."""
-        if not self.check_session_active(session_id):
-            raise Exception("Given session_id is not active.")
+        if not self.check_session_exists(session_id):
+            raise SessionDoesNotExist(session_id)
 
         # Fetch the command from the session communications
         cmd = self._session_communications[session_id]["command"]
@@ -322,15 +355,15 @@ class Sessions:
     def get_response(self, session_id: str):
         """Fetch the responses from the communications"""
         # Check if the session is active
-        if not self.check_session_active(session_id):
-            raise Exception("Given session_id is not active.")
+        if not self.check_session_exists(session_id):
+            raise SessionDoesNotExist(session_id)
 
         # Fetch all responses
         res = self._session_communications[session_id]["responses"]
         self._session_communications[session_id]["responses"] = []
         return res
 
-    def check_session_active(self, session_id: str):
+    def check_session_exists(self, session_id: str):
         """Check if the given session exists and is active."""
         return True if self._sessions.get(session_id, None) is not None else False
 
