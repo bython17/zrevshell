@@ -14,6 +14,8 @@ def start_server():
         target=server.run_server, args=(hp.config, hp.sessions), daemon=True
     )
     server_thread.start()
+    yield
+    hp.database.session_data.close()
 
 
 @pytest.fixture(scope="session")

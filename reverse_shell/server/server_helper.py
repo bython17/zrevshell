@@ -18,7 +18,7 @@ from reverse_shell.server import ErrorCodes as ec
 
 class Communication(TypedDict):
     command: str | None
-    responses: list[str]
+    responses: list[str | int]
 
 
 class SessionKeys(TypedDict):
@@ -44,7 +44,7 @@ class ClientAlreadyInSession(Exception):
 
 class Database:
     def __init__(
-        self, db_path: Path | None, base_dir: Path, allow_multithreaded_db: bool = False
+        self, db_path: Path | None, base_dir: Path, allow_multithreaded_db: bool = True
     ):
         # ---- Required database schemas
         self.session_data_schema = [
@@ -60,27 +60,11 @@ class Database:
         )
         """,
             """
-        CREATE TABLE IF NOT EXISTS commands(
-            command_id TEXT PRIMARY KEY,
-            victim_id TEXT,
-            command TEXT,
-            date DATE
-        )
-        """,
-            """
-        CREATE TABLE IF NOT EXISTS responses(
-            response_id TEXT PRIMARY KEY,
-            victim_id TEXT,
-            response TEXT,
-            command_id TEXT,
-            FOREIGN KEY(command_id) REFERENCES commands(command_id)
-        )
-        """,
-            """
         CREATE TABLE IF NOT EXISTS clients(
             client_id TEXT PRIMARY KEY,
             client_type TEXT,
-            status INTEGER
+            last_requested REAL,
+            status INT
         )
         """,
         ]
@@ -106,17 +90,19 @@ class Database:
 
         return "".join(schema_lst)
 
-    def query(self, query: str, __params=None):
+    def query(self, query: str, __params=None, raise_for_error=False):
         """Return all results that return from a database query provided by `query` and return None when`sqlite3.OperationalError` occurs"""
         # Let's execute and handle the query
         try:
             cur = self.session_data.cursor()
             cur.execute(query, __params if __params is not None else ())
             return cur.fetchall()
-        except sq.Error:
+        except sq.Error as e:
+            if raise_for_error:
+                raise sq.Error(e)
             return None
 
-    def execute(self, statement: str, __params=None):
+    def execute(self, statement: str, __params=None, raise_for_error=False):
         """Execute the `statement` on the database and return `None` if `sqlite3.OperationalError` get's raised and the cursor if successful."""
         try:
             conn = self.session_data.cursor()
@@ -124,8 +110,10 @@ class Database:
             self.session_data.commit()
             return res_cur
         except sq.Error as e:
+            if raise_for_error:
+                raise sq.Error(e)
             ut.log("debug", f"SQLERROR: {e}")
-            ut.log("debug", f"    from: `{statement}`")
+            ut.log("debug", f"from: `{statement}`")
             return None
 
     def get_database(
@@ -332,7 +320,7 @@ class Sessions:
         # Now let's insert the command inside the session
         self._session_communications[session_id]["command"] = cmd
 
-    def insert_response(self, session_id: str, res: str):
+    def insert_response(self, session_id: str, res: str | int):
         """Add the response given in the responses list."""
         # As always first check if the session is active
         if not self.check_session_exists(session_id):
@@ -455,6 +443,9 @@ class Config:
         # ---- Debug flag
         self.is_debug = self.config.debug
 
+        # ---- Victim offline limit
+        self.client_offline_limit = config.client_offline_limit
+
         # ---- Saving profile changes
         self.commit_profile()
 
@@ -543,7 +534,8 @@ class Config:
             # Exit with an error if the file provided by the user doesn't exist
             if not profile_filepath.resolve().exists():
                 ut.error_exit(
-                    f"The file `{profile_filepath}` doesn't exist.", ec.file_not_found
+                    f"The file `{profile_filepath}` doesn't exist in {profile_filepath}",
+                    ec.file_not_found,
                 )
 
         # This is the validation,  we will just check if there
@@ -608,15 +600,16 @@ def get_argument_parser():
         default=Path("server_data"),
     )
 
-    # NotImplemented yet, but will be soon
     parser.add_argument(
-        "--pulse-check-frequency",
-        "-pcf",
+        "--client-offline-limit",
+        "-vol",
+        type=int,
         required=False,
         help=(
-            "Frequency of the server checking the status of the victims for their"
-            " status(online or offline)."
+            "The time(in seconds) that a client is allowed to be referred as online without"
+            " sending any request."
         ),
+        default=20,
     )
 
     parser.add_argument(

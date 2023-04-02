@@ -28,7 +28,7 @@ def db_cursor():
 # Some helper functions
 def create_hacker(hacker_id: str, db_cursor: Cursor):
     db_cursor.execute(
-        "INSERT INTO clients VALUES(?, ?, 1)", (hacker_id, ut.ClientType.hacker)
+        "INSERT INTO clients VALUES(?, ?, 0.0, 1)", (hacker_id, ut.ClientType.hacker)
     )
 
 
@@ -46,7 +46,7 @@ def create_victim(
     """Create a victim using the parameters, the order of the victim_info param is as follows:
     host_name, OS, ARCH, CPU and RAM"""
     db_cursor.execute(
-        "INSERT INTO clients VALUES(?, ?, 1)", (victim_id, ut.ClientType.victim)
+        "INSERT INTO clients VALUES(?, ?, 0.0, 1)", (victim_id, ut.ClientType.victim)
     )
     db_cursor.execute(
         "INSERT INTO victim_info VALUES(?, ?, ?, ?, ?, ?)",
@@ -387,6 +387,7 @@ def test_post_cmd_with_dead_session(
         {
             "session_id": ut.generate_token(),  # A fake token(i.e the session isn't running)
             "command": "whoami",
+            "empty": False,
         }
     )
 
@@ -413,7 +414,9 @@ def test_post_cmd_with_victim_in_session(
     # Let's put the victim in session with supposedly another hacker
     session_id = hp.sessions.add_session(ut.generate_token(), victim_id)
 
-    request_body = js.dumps({"session_id": session_id, "command": "whoami"})
+    request_body = js.dumps(
+        {"session_id": session_id, "command": "whoami", "empty": False}
+    )
 
     client.request(
         "POST",
@@ -440,7 +443,9 @@ def test_post_cmd_with_victim_in_other_session_and_hacker_in_another(
     # Let's put the victim in session with supposedly another hacker
     session_id = hp.sessions.add_session(ut.generate_token(), victim_id)
 
-    request_body = js.dumps({"session_id": session_id, "command": "whoami"})
+    request_body = js.dumps(
+        {"session_id": session_id, "command": "whoami", "empty": False}
+    )
 
     client.request(
         "POST",
@@ -477,6 +482,34 @@ def test_post_cmd_without_body(
     assert client.getresponse().status == st.BAD_REQUEST
 
 
+def test_post_cmd_with_empty_flag(
+    client: HTTPConnection, db_cursor: Cursor, verified_hacker_header: dict[str, str]
+):
+    # Create the victim and the hacker
+    hacker_id = verified_hacker_header["client-id"]
+    create_hacker(hacker_id, db_cursor)
+
+    victim_id = ut.generate_token()
+    create_victim(victim_id, db_cursor)
+
+    # putting the hacker in session with the victim
+    session_id = hp.sessions.add_session(hacker_id, victim_id)
+
+    request_body = js.dumps({"session_id": session_id, "command": "", "empty": True})
+
+    client.request(
+        "POST",
+        f"/{post_cmd_path}",
+        body=ut.encode_token(request_body),
+        headers=verified_hacker_header,
+    )
+
+    assert client.getresponse().status == st.CREATED
+
+    # Check if the session comm is modified accordingly
+    assert hp.sessions.get_command(session_id) is None
+
+
 def test_post_cmd_properly(
     client: HTTPConnection, db_cursor: Cursor, verified_hacker_header: dict[str, str]
 ):
@@ -491,7 +524,7 @@ def test_post_cmd_properly(
     session_id = hp.sessions.add_session(hacker_id, victim_id)
 
     cmd = "whoami"
-    request_body = js.dumps({"session_id": session_id, "command": cmd})
+    request_body = js.dumps({"session_id": session_id, "command": cmd, "empty": False})
 
     client.request(
         "POST",
@@ -668,6 +701,8 @@ def test_post_res_with_dead_session(
         {
             "session_id": ut.generate_token(),  # This supposed to be the non-existing session_id
             "response": "Some random response",
+            "empty": False,
+            "command_status_code": None,
         }
     )
 
@@ -699,7 +734,12 @@ def test_post_res_using_a_session_id_belonging_to_another_session(
 
     # build the request_body
     req_body = js.dumps(
-        {"session_id": session_id, "response": "Just a simple response"}
+        {
+            "session_id": session_id,
+            "response": "Just a simple response",
+            "empty": False,
+            "command_status_code": None,
+        }
     )
 
     # Now try requesting the server
@@ -749,6 +789,46 @@ def test_post_res_with_invalid_body(
     assert client.getresponse().status == st.BAD_REQUEST
 
 
+def test_post_res_with_with_empty_flag(
+    client: HTTPConnection, db_cursor: Cursor, verified_client_header: dict[str, str]
+):
+    # Now let's do everything as expected and try it
+    victim_id = verified_client_header["client-id"]
+    create_victim(victim_id, db_cursor)
+
+    hacker_id = ut.generate_token()
+    create_hacker(hacker_id, db_cursor)
+
+    # Putting the hacker and victim inside a session
+    session_id = hp.sessions.add_session(hacker_id, victim_id)
+
+    req_body = js.dumps(
+        {
+            "session_id": session_id,
+            "response": "",
+            "empty": True,
+            "command_status_code": None,
+        }
+    )
+
+    client.request(
+        "POST",
+        f"/{post_res_path}",
+        body=ut.encode_token(req_body),
+        headers=verified_client_header,
+    )
+
+    # Now check both the status code and the session communications if the needed
+    # response is added in the correct place.
+    response = client.getresponse()
+
+    assert response.status == st.OK
+
+    remote_res = hp.sessions.get_response(session_id)
+
+    assert remote_res == []
+
+
 def test_post_res_properly(
     client: HTTPConnection, db_cursor: Cursor, verified_client_header: dict[str, str]
 ):
@@ -763,7 +843,14 @@ def test_post_res_properly(
     session_id = hp.sessions.add_session(hacker_id, victim_id)
     res = "testing"
 
-    req_body = js.dumps({"session_id": session_id, "response": res})
+    req_body = js.dumps(
+        {
+            "session_id": session_id,
+            "response": res,
+            "empty": False,
+            "command_status_code": None,
+        }
+    )
 
     client.request(
         "POST",
@@ -865,6 +952,47 @@ def test_fetch_res_when_the_hacker_is_not_in_a_session(
     )
 
     assert client.getresponse().status == st.NOT_ACCEPTABLE
+
+
+@pytest.mark.parametrize("message", [("some response"), (0)])
+def test_fetch_res_when_response_ends(
+    client: HTTPConnection,
+    db_cursor: Cursor,
+    verified_hacker_header: dict[str, str],
+    message: str | int,
+):
+    # Check if the end_response works, if the response is an end response it
+    # will also give the finished status code.
+
+    hacker_id = verified_hacker_header["client-id"]
+    create_hacker(hacker_id, db_cursor)
+
+    # Put a hacker and victim in session
+    session_id = hp.sessions.add_session(hacker_id, ut.generate_token())
+
+    # Now emulate the case where we send the finished response
+    hp.sessions.insert_response(session_id, message)
+
+    # Now try to fetch_res
+    client.request(
+        "GET",
+        f"/{fetch_res_path}",
+        body=ut.encode_token(session_id),
+        headers=verified_hacker_header,
+    )
+
+    response = client.getresponse()
+
+    assert response.status == st.OK
+
+    content_len = response.getheader("content-length")
+    if content_len is None:
+        assert False
+
+    responses = response.read(int(content_len)).decode()
+    recvd_responses = js.loads(ut.decode_token(responses))
+
+    assert recvd_responses[0] == message
 
 
 # ---------- Testing command 'list_victims' ---------- #
@@ -1147,7 +1275,7 @@ def test_normal_flow(
     assert victim_client.getresponse().status == st.NO_CONTENT
 
     # Now post a command from the hacker
-    command = {"session_id": session_id, "command": "whoami"}
+    command = {"session_id": session_id, "command": "whoami", "empty": False}
 
     hacker_client.request(
         "POST",
@@ -1190,7 +1318,12 @@ def test_normal_flow(
     assert hacker_client.getresponse().status == st.NO_CONTENT
 
     # and now we'll send the response via the victim
-    victim_response = {"session_id": session_id, "response": "somebody"}
+    victim_response = {
+        "session_id": session_id,
+        "response": "somebody",
+        "empty": False,
+        "command_status_code": None,
+    }
 
     victim_client.request(
         "POST",

