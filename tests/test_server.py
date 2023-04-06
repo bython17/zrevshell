@@ -346,6 +346,101 @@ def test_create_session_for_session_id_in_body_as_hacker(
     )
 
 
+def test_create_session_when_hacker_in_multiple_valid_sessions(
+    client: HTTPConnection, db_cursor: Cursor, verified_hacker_header: dict[str, str]
+):
+    hacker_id = verified_hacker_header["client-id"]
+    create_hacker(hacker_id, db_cursor)
+
+    victim1_id, victim2_id = ut.generate_token(), ut.generate_token()
+    create_victim(victim1_id, db_cursor)
+    create_victim(victim2_id, db_cursor)
+
+    # Now let's create session between the one hacker and
+    # the multiple sessions
+    client.request(
+        "POST",
+        f"/{create_session_path}",
+        body=ut.encode_token(victim1_id),
+        headers=verified_hacker_header,
+    )
+
+    # this should produce an OK response and we should
+    # have the hacker tied up to the first victim in our session manager
+    response = client.getresponse()
+
+    assert response.status == st.OK
+
+    content_size = response.getheader("content-length")
+
+    if content_size is None:
+        assert False
+
+    # Decoding and reading the response body
+    raw_response = response.read(int(content_size)).decode("utf8")
+    session_id = ut.decode_token(raw_response)
+
+    assert (
+        hp.sessions.get_session(session_id)["hacker_id"] == hacker_id
+        and hp.sessions.get_session(session_id)["victim_id"] == victim1_id
+    )
+
+    client.request(
+        "POST",
+        f"/{create_session_path}",
+        body=ut.encode_token(victim2_id),
+        headers=verified_hacker_header,
+    )
+
+    # this should produce an OK response and we should
+    # have the hacker tied up to the first victim in our session manager
+    response = client.getresponse()
+
+    assert response.status == st.FORBIDDEN  # Since the hacker was in a session
+
+
+def test_create_session_when_hacker_has_exited_from_another_session(
+    client: HTTPConnection, db_cursor: Cursor, verified_hacker_header: dict[str, str]
+):
+    # Create the victim and the hacker, exit(kill the session) and
+    # try to create another session with another client.
+    hacker_id = verified_hacker_header["client-id"]
+    create_hacker(hacker_id, db_cursor)
+
+    victim_id = ut.generate_token()
+    create_victim(victim_id, db_cursor)
+
+    session_id = hp.sessions.add_session(hacker_id, victim_id)
+    # Now kill the session, remove it from the client_list and the sessions map
+    # this emulates the condition when the hacker exits a session.
+    hp.sessions.kill_session(session_id)
+    hp.sessions._client_list.remove(hacker_id)
+    hp.sessions._sessions[session_id]["hacker_id"] = None
+
+    # And now let's try to create a session with another
+    # victim
+    victim2_id = ut.generate_token()
+    create_victim(victim2_id, db_cursor)
+
+    client.request(
+        "POST",
+        f"/{create_session_path}",
+        body=ut.encode_token(victim2_id),
+        headers=verified_hacker_header,
+    )
+
+    response = client.getresponse()
+    assert response.status == st.OK
+
+    content_length = response.getheader("content-length")
+    if content_length is None:
+        assert False
+
+    session_id = ut.decode_token(response.read(int(content_length)).decode())
+
+    assert hp.sessions.get_session_id(hacker_id) == session_id
+
+
 def test_create_session_properly(
     client: HTTPConnection,
     db_cursor: Cursor,

