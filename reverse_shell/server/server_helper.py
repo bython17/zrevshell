@@ -443,6 +443,25 @@ class Config:
         # ---- IP and port
         self.port = self.get_port_ip("port", self.config.port, 8080)
         self.ip = self.get_port_ip("ip", self.config.ip, "0.0.0.0")
+        self.connect_ip = self.get_port_ip(
+            "connect_ip", self.config.connect_ip, self.ip
+        )
+
+        # Let's validate the IP and port addresses
+        if not ut.validate_ip_address(self.ip):
+            ut.error_exit(f"Invalid IP address {self.ip}", ec.invalid_ip)
+        if not ut.validate_ip_address(self.connect_ip):
+            ut.error_exit(f"Invalid IP address {self.connect_ip}", ec.invalid_ip)
+        if not ut.validate_port(self.port):
+            ut.error_exit(f"Invalid port number {self.port}", ec.invalid_port)
+
+        # If the ip is equal to 0.0.0.0 and the connect_ip is also None
+        # we need to tell the user to specify the connect_ip
+        if self.ip == "0.0.0.0" and self.connect_ip == "0.0.0.0":
+            ut.error_exit(
+                "IP address is 0.0.0.0, but connect-ip is not specified or is set to '0.0.0.0'. If you need more info read the help message.",
+                ec.connect_ip_not_specified,
+            )
 
         # ---- Debug flag
         self.is_debug = self.config.debug
@@ -631,8 +650,20 @@ def get_argument_parser():
         type=str,
         required=False,
         help=(
-            "The ip where the server is hosted on, default=0.0.0.0 i.e, all"
+            "The ip where the server is hosted on. If the ip is 0.0.0.0, the 'connect_ip' must be specified, default=0.0.0.0 i.e, all"
             " interfaces"
+        ),
+        default=None,
+    )
+
+    parser.add_argument(
+        "-ci",
+        "--connect-ip",
+        type=str,
+        required=False,
+        help=(
+            "This argument specifies the IP where the clients connect with the server. It is normally identical to the"
+            " ip the server binds to, but if the server is, for example, bound to 0.0.0.0 you need to specify this argument."
         ),
         default=None,
     )

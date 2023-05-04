@@ -33,6 +33,32 @@ class ServerCommands:
     delete_hacker = "delete_hacker"
 
 
+def validate_ip_address(ip: str):
+    """Validates the ip and returns `True` if valid and `False` if otherwise"""
+    ip_split = ip.split(".")
+
+    if len(ip_split) != 4:
+        return False
+
+    # Let's try to convert each section to an int
+    # and check if it is less than 255
+    try:
+        for section in ip_split:
+            if not 0 <= int(section) < 256:
+                return False
+    except ValueError:
+        return False
+
+    return True
+
+
+def validate_port(port: int):
+    """Validates the port and returns `True` if valid and `False` if otherwise"""
+    if 0 < port < 65_536:
+        return True
+    return False
+
+
 def log(focus_message: str, description):
     print(f"[{focus_message.upper()}] {description}")
 
