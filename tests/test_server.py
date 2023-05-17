@@ -118,7 +118,7 @@ register_cmd_path = get_cmd_id(ut.ServerCommands.register)
 
 @pytest.mark.parametrize(
     "client_type",
-    [(ut.ClientType.admin), (ut.ClientType.hacker), (ut.ClientType.victim)],
+    [(ut.ClientType.hacker), (ut.ClientType.victim)],
 )
 def test_register_basic(
     client: HTTPConnection,
@@ -136,7 +136,6 @@ def test_register_basic(
             **verified_client_header,
             "client-type": client_type.__str__(),
             "hacker-token": ut.encode_token(hp.config.hacker_token),
-            "admin-token": ut.encode_token(hp.config.admin_token),
         },
     )
     # First let's check for the response_code

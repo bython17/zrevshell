@@ -17,5 +17,8 @@ database = server_helper.Database(None, base_dir, allow_multithreaded_db=True)
 sessions = server_helper.Sessions()
 
 config = server_helper.Config(
-    server_helper.get_argument_parser().parse_args(["-b", f"{base_dir}"]), database
+    server_helper.get_argument_parser().parse_args(
+        ["-b", f"{base_dir}", "--connect-ip", "127.0.0.1"]
+    ),
+    database,
 )

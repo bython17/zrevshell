@@ -128,7 +128,6 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             for client_type in [
                 ut.ClientType.hacker,
                 ut.ClientType.victim,
-                ut.ClientType.admin,
             ]
             if usr_client_type == client_type.__str__()
         ]
@@ -604,13 +603,10 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         legit_client = False
 
         hacker_token = self.get_header_token("hacker-token")
-        admin_token = self.get_header_token("admin-token")
 
         legit_user: dict[str, bool] = {
             ut.ClientType.hacker.__str__(): hacker_token is not None
             and hacker_token == self.config.hacker_token,
-            ut.ClientType.admin.__str__(): admin_token is not None
-            and admin_token == self.config.admin_token,
             ut.ClientType.victim.__str__(): True,
         }
 
@@ -824,13 +820,6 @@ def run_server(
         (
             "Authentication Token:"
             f" {configuration.auth_token}{f'  --  {ut.encode_token(configuration.auth_token)}' if configuration.is_debug else ''}"
-        ),
-    )
-    ut.log(
-        "info",
-        (
-            "Administration Token:"
-            f" {configuration.admin_token}{f'  --  {ut.encode_token(configuration.admin_token)}' if configuration.is_debug else ''}"
         ),
     )
     ut.log(

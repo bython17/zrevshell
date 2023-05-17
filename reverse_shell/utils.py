@@ -15,7 +15,6 @@ class ClientType:
     # Plain numbers are fine since we don't care about the values
     hacker = 1
     victim = 2
-    admin = 3
 
 
 class ServerCommands:
