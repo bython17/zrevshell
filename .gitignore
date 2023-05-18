@@ -136,3 +136,6 @@ ole32.dll
 
 # temporary files
 .tmp/
+
+# Rust target dir
+target/

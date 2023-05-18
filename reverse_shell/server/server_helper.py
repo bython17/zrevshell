@@ -382,7 +382,6 @@ class HandlerResponse:
 
 class Config:
     def __init__(self, config: Namespace, database: Optional[Database] = None):
-        # ---- Schema
         self.config = config
 
         # ---- Setup the profile file
@@ -631,6 +630,14 @@ def get_argument_parser():
         required=False,
         help="Directory where the server will store it's data.",
         default=Path("server_data"),
+    )
+
+    parser.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        required=False,
+        help="Force overwriting directory, when running the server.",
     )
 
     parser.add_argument(
