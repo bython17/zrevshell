@@ -153,3 +153,13 @@ def get_id(file_path: Path):
     file_path.write_bytes(data.encode("ascii"))
 
     return client_id
+
+
+def create_base_dir(base_dir: Path, force: bool, err_code: int):
+    if not force and base_dir.resolve().is_dir():
+        error_exit(
+            f"Can't overwrite '{base_dir}' found in the current directory, use --force to overwrite the directory",
+            err_code,
+        )
+    else:
+        base_dir.mkdir(exist_ok=True, parents=True)

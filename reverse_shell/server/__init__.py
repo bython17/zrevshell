@@ -6,3 +6,4 @@ class ErrorCodes:
     connect_ip_not_specified = 5
     invalid_ip = 6
     invalid_port = 7
+    could_not_overwrite = 8

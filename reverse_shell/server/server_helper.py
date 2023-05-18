@@ -44,7 +44,11 @@ class ClientAlreadyInSession(Exception):
 
 class Database:
     def __init__(
-        self, db_path: Path | None, base_dir: Path, allow_multithreaded_db: bool = True
+        self,
+        db_path: Path | None,
+        base_dir: Path,
+        force_base_dir_creation: bool,
+        allow_multithreaded_db: bool = True,
     ):
         # ---- Required database schemas
         self.session_data_schema = [
@@ -70,6 +74,7 @@ class Database:
         ]
 
         # ---- Creating instances of the parameters
+        self.force_base_dir_creation = force_base_dir_creation
         self.allow_multithreaded_db = allow_multithreaded_db
         self.base_dir = base_dir
 
@@ -127,7 +132,9 @@ class Database:
         if db_filepath is None:
             # Or if we are not provided with a database
             # create the base_directory and the database file
-            self.base_dir.mkdir(exist_ok=True, parents=True)
+            ut.create_base_dir(
+                self.base_dir, self.force_base_dir_creation, ec.could_not_overwrite
+            )
             db_filepath = self.base_dir / db_name
             # Since the file is new it is not user given
             already_existing_db = False
@@ -389,7 +396,7 @@ class Config:
 
         # Initialize the database according to config
         self.database = (
-            Database(config.session_data, config.base_dir)
+            Database(config.session_data, config.base_dir, self.config.force)
             if database is None
             else database
         )
@@ -557,7 +564,9 @@ class Config:
         if profile_filepath is None:
             # Or the user didn't provide us with a profile,
             # create the base_directory and the profile file
-            self.config.base_dir.mkdir(exist_ok=True, parents=True)
+            ut.create_base_dir(
+                self.config.base_dir, self.config.force, ec.could_not_overwrite
+            )
             profile_filepath = self.config.base_dir / profile_name
             # Write {} to make it JSON decodable
             ut.write_blank_json(profile_filepath)
