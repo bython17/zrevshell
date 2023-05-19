@@ -1,1 +1,17 @@
-{}
+{
+  "auth_token": "e9e269bf84cd4209ab69d6e33f26a9cd",
+  "hacker_token": "d2a634366dcf411cb99bb54c5499600a",
+  "register": "/a0f3f8a2",
+  "fetch_cmd": "/2f36dff5",
+  "post_res": "/aa24ffcb",
+  "post_cmd": "/30f7e29e",
+  "fetch_res": "/bd4b101c",
+  "create_session": "/cc482eb0",
+  "get_session": "/1b2941a0",
+  "list_victims": "/bcf128ed",
+  "exit_session": "/2cc5b877",
+  "delete_hacker": "/f6eed113",
+  "port": 8080,
+  "ip": "0.0.0.0",
+  "connect_ip": "127.0.0.1"
+}
