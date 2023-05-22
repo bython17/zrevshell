@@ -351,10 +351,12 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         if result is not None:
             if len(result) > 0:
                 return sh.HandlerResponse(False, HTTPStatus.CONFLICT)
+
         # If our user is valid then we can maybe add him to the database
         client_insert_op = self.database.execute(
             "INSERT INTO clients VALUES(?, ?, 0.0, 0)", [client_id, client_type]
         )
+
         if client_insert_op is None:
             # Some kinda SQL error happened so let's send a internal server error message
             return sh.HandlerResponse(False, HTTPStatus.INTERNAL_SERVER_ERROR)
@@ -647,7 +649,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             self.c_send_error(HTTPStatus.UNAUTHORIZED)
             return
 
-        if command != "register":
+        if command != ut.ServerCommands.register:
             # Update the status and last checked time of
             # the client.
 
@@ -684,14 +686,6 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
     def main_handler(self, method: HTTPMethod):
         """Handle requests."""
-
-        # Check if the request is valid
-        if not self.check_verified_request():
-            return
-
-        # Get the client id
-        client_id = self.headers.get("client-id").__str__()
-
         # This is for when accessing the root path. simply send
         # an OK code with a simple html file.
         if self.path == "/":
@@ -716,6 +710,18 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
+
+        # Check if the request is valid
+        if not self.check_verified_request():
+            return
+
+        # Just for the sake of testing the "check_verified_request"
+        if self.path == "/verify":
+            self.send_response(HTTPStatus.OK)
+            self.end_headers()
+
+        # Get the client id
+        client_id = self.headers.get("client-id").__str__()
 
         # the self.path is the command's id in this case
         command = self.config.server_cmds.get(self.path, None)
@@ -873,7 +879,7 @@ def main():
     # Start the pulse check thread
     check_pulse_thread = th.Thread(
         target=check_pulse,
-        args=(configuration.database, configuration.client_offline_limit, stop_event),
+        args=(configuration.database, configuration.client_idle_duration, stop_event),
     )
     check_pulse_thread.daemon = True
     check_pulse_thread.start()

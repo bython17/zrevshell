@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "zrevshell"
-version = "0.1.1-alpha"
+version = "0.1.2-alpha"
 description = "A server-client based reverse shell written in Python"
 authors = ["Bezaleel Wondimagegn <92359779+bython17@users.noreply.github.com>"]
 license = "GPL-3.0 license"
@@ -17,7 +17,7 @@ poetry_command = "exec"
 format = "sh format.sh"
 build-victim = {shell = "cd reverse_shell/victim/ && cargo build --release"}
 dev-victim = {shell = "cd reverse_shell/victim/ && cargo run"}
-dev-server = "python3 reverse_shell/server/server.py --connect-ip 127.0.0.1"
+dev-server = "python3 reverse_shell/server/server.py --connect-ip 127.0.0.1 -pf server_data/profile.json -sd server_data/data.db"
 server = "python3 reverse_shell/server/server.py"
 build = "python3 build.py"
 

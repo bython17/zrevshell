@@ -482,8 +482,8 @@ class Config:
         # ---- Debug flag
         self.is_debug = self.config.debug
 
-        # ---- Victim offline limit
-        self.client_offline_limit = config.client_offline_limit
+        # ---- Client idle duration
+        self.client_idle_duration = config.client_idle_duration
 
         # ---- Saving profile changes
         self.commit_profile()
@@ -650,8 +650,8 @@ def get_argument_parser():
     )
 
     parser.add_argument(
-        "--client-offline-limit",
-        "-vol",
+        "--client-idle-duration",
+        "-cid",
         type=int,
         required=False,
         help=(

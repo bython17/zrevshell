@@ -90,7 +90,8 @@ def test_check_verified_request(
     client: HTTPConnection, headers: dict[str, str], res_code: st
 ):
     # Let's send our request to the server using the client fixture
-    client.request("GET", "/", headers=headers)
+    # let's update the signature because now / is open to everyone.
+    client.request("GET", "/verify", headers=headers)
     assert client.getresponse().status == res_code
 
 
