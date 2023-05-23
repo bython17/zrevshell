@@ -54,43 +54,66 @@ fn handle_deserialize_errors(err: sj::Error) -> ! {
 
 fn generate_code(profile: &Profile) -> String {
     format!(
-        r#"
-    use std::net::Ipv4Addr;
-    use std::str::FromStr;
+        r#"use std::net::Ipv4Addr;
+use std::str::FromStr;
 
-    pub struct Config {{
-        pub token: &'static str,
-        pub connect_ip: Ipv4Addr,
-        pub port: u16,
-    }}
-    
-    impl Config {{
-        pub fn new() -> Self {{
-            Config {{
-                token: "{}",
-                connect_ip: Ipv4Addr::from_str("{}").unwrap(),
-                port: {}
-            }}
+pub struct Config {{
+    pub token: &'static str,
+    pub connect_ip: Ipv4Addr,
+    pub port: u16,
+}}
+
+impl Config {{
+    pub fn new() -> Self {{
+        Config {{
+            token: "{}",
+            connect_ip: Ipv4Addr::from_str("{}").unwrap(),
+            port: {}
         }}
     }}
-    
-    pub struct ServerCommands {{
-        pub register: &'static str,
-        pub fetch_cmd: &'static str,
-        pub post_res: &'static str,
-        pub get_session: &'static str,
-    }}
-    
-    impl ServerCommands {{
-        pub fn new() -> Self {{
-            ServerCommands {{
-                register: "{}",
-                fetch_cmd: "{}",
-                post_res: "{}",
-                get_session: "{}"
-            }}
+}}
+
+pub struct ServerCommands {{
+    pub register: &'static str,
+    pub fetch_cmd: &'static str,
+    pub post_res: &'static str,
+    pub get_session: &'static str,
+}}
+
+impl ServerCommands {{
+    pub fn new() -> Self {{
+        ServerCommands {{
+            register: "{}",
+            fetch_cmd: "{}",
+            post_res: "{}",
+            get_session: "{}"
         }}
     }}
+}}
+
+pub struct EndPoints {{
+    pub register: String,
+    pub fetch_cmd: String,
+    pub post_res: String,
+    pub get_session: String 
+}}
+
+impl EndPoints {{
+    pub fn new() -> Self {{
+        let server_cmds = ServerCommands::new();
+        EndPoints {{
+            register: format!("{{}}{{}}", Self::base_path(), server_cmds.register),
+            fetch_cmd: format!("{{}}{{}}", Self::base_path(), server_cmds.fetch_cmd),
+            post_res: format!("{{}}{{}}", Self::base_path(), server_cmds.post_res),
+            get_session: format!("{{}}{{}}", Self::base_path(), server_cmds.get_session),
+        }}
+    }}
+
+    pub fn base_path() -> String {{
+        let config = Config::new();
+        format!("http://{{}}:{{}}/", config.connect_ip, config.port)
+    }}
+}}
     "#,
         profile.auth_token,
         profile.connect_ip.to_string(),
@@ -98,7 +121,7 @@ fn generate_code(profile: &Profile) -> String {
         profile.register,
         profile.fetch_cmd,
         profile.post_res,
-        profile.get_session
+        profile.get_session,
     )
 }
 
@@ -121,7 +144,10 @@ fn main() {
     let dest_path = Path::new(&out_dir).join("profile.rs");
 
     fs::write(&dest_path, code).unwrap_or_else(|_| {
-        eprintln!("(?) Couldn't write generated code to 'profile.rs'");
+        eprintln!(
+            "(?) Couldn't write generated code to {}",
+            dest_path.display()
+        );
         process::exit(7);
     });
 
