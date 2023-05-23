@@ -17,7 +17,7 @@ poetry_command = "exec"
 format = "sh format.sh"
 build-victim = {shell = "cd reverse_shell/victim/ && cargo build --release"}
 dev-victim = {shell = "cd reverse_shell/victim/ && cargo run"}
-dev-server = "python3 reverse_shell/server/server.py --connect-ip 127.0.0.1 -pf server_data/profile.json -sd server_data/data.db"
+dev-server = "python3 reverse_shell/server/server.py --connect-ip 127.0.0.1 -pf server_data/profile.json -sd server_data/data.db -d"
 server = "python3 reverse_shell/server/server.py"
 build = "python3 build.py"
 

