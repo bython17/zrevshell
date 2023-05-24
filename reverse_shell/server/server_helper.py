@@ -58,7 +58,7 @@ class Database:
             host_name TEXT,
             os TEXT,
             arch TEXT,
-            cpu TEXT,
+            clock_speed INT,
             ram TEXT,
             FOREIGN KEY(id) REFERENCES clients(client_id)
         )

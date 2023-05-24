@@ -159,13 +159,13 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             host_name = victim_info.get("host_name", None)
             os = victim_info.get("os", None)
             arch = victim_info.get("arch", None)
-            cpu = victim_info.get("cpu", None)
+            clock_speed = victim_info.get("clock_speed", None)
             ram = victim_info.get("ram", None)
 
             # Insert that to the victims database
             return self.database.execute(
                 "INSERT INTO victim_info VALUES(?, ?, ?, ?, ?, ?)",
-                [victim_id, host_name, os, arch, cpu, ram],
+                [victim_id, host_name, os, arch, clock_speed, ram],
             )
         else:
             # Well we couldn't even parse the victim info so let's just
