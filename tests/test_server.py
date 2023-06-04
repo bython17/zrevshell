@@ -5,6 +5,7 @@ from sqlite3 import Cursor
 
 import helper as hp
 import pytest
+from reverse_shell.server.server_helper import Response
 
 import reverse_shell.utils as ut
 
@@ -960,7 +961,7 @@ def test_post_res_properly(
 
     assert response.status == st.OK
 
-    remote_res = hp.sessions.get_response(session_id)[0]
+    remote_res = hp.sessions.get_response(session_id)[0]["response"]
 
     assert remote_res == res
 
@@ -1049,12 +1050,18 @@ def test_fetch_res_when_the_hacker_is_not_in_a_session(
     assert client.getresponse().status == st.NOT_ACCEPTABLE
 
 
-@pytest.mark.parametrize("message", [("some response"), (0)])
+@pytest.mark.parametrize(
+    "response",
+    [
+        ({"response": "just about to finish", "command_status_code": None}),
+        ({"response": "finished", "command_status_code": 0}),
+    ],
+)
 def test_fetch_res_when_response_ends(
     client: HTTPConnection,
     db_cursor: Cursor,
     verified_hacker_header: dict[str, str],
-    message: str | int,
+    response: Response,
 ):
     # Check if the end_response works, if the response is an end response it
     # will also give the finished status code.
@@ -1066,7 +1073,9 @@ def test_fetch_res_when_response_ends(
     session_id = hp.sessions.add_session(hacker_id, ut.generate_token())
 
     # Now emulate the case where we send the finished response
-    hp.sessions.insert_response(session_id, message)
+    hp.sessions.insert_response(
+        session_id, response["response"], response["command_status_code"]
+    )
 
     # Now try to fetch_res
     client.request(
@@ -1076,18 +1085,19 @@ def test_fetch_res_when_response_ends(
         headers=verified_hacker_header,
     )
 
-    response = client.getresponse()
+    server_response = client.getresponse()
 
-    assert response.status == st.OK
+    assert server_response.status == st.OK
 
-    content_len = response.getheader("content-length")
+    content_len = server_response.getheader("content-length")
     if content_len is None:
         assert False
 
-    responses = response.read(int(content_len)).decode()
+    responses = server_response.read(int(content_len)).decode()
     recvd_responses = js.loads(ut.decode_token(responses))
 
-    assert recvd_responses[0] == message
+    assert recvd_responses[0]["response"] == response["response"]
+    assert recvd_responses[0]["command_status_code"] == response["command_status_code"]
 
 
 # ---------- Testing command 'list_victims' ---------- #
@@ -1445,13 +1455,13 @@ def test_normal_flow(
     recvd_response = response.read(int(content_length)).decode()
     recvd_response = ut.decode_token(recvd_response)
     # Now decode the json from it
-    recvd_response = js.loads(recvd_response)
+    recvd_response_obj: list[Response] = js.loads(recvd_response)
 
     assert response.status == st.OK
 
     # Check if the response gotten by the victim matches
     # that one of the hacker's
-    assert victim_response["response"] == recvd_response[0]
+    assert victim_response["response"] == recvd_response_obj[0]["response"]
 
     # Now let's try to safely exit from the session
     hacker_client.request(

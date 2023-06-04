@@ -3,6 +3,6 @@
   "python.linting.flake8Enabled": true,
   "python.linting.mypyEnabled": true,
   "python.linting.enabled": true,
-  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.typeCheckingMode": "off",
   "rust-analyzer.linkedProjects": ["./reverse_shell/victim/Cargo.toml"]
 }

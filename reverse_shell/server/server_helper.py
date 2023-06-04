@@ -16,9 +16,14 @@ from reverse_shell import __app_name__, __version__
 from reverse_shell.server import ErrorCodes as ec
 
 
+class Response(TypedDict):
+    response: str
+    command_status_code: Optional[int]
+
+
 class Communication(TypedDict):
     command: str | None
-    responses: list[str | int]
+    responses: list[Response]
 
 
 class SessionKeys(TypedDict):
@@ -331,14 +336,18 @@ class Sessions:
         # Now let's insert the command inside the session
         self._session_communications[session_id]["command"] = cmd
 
-    def insert_response(self, session_id: str, res: str | int):
+    def insert_response(
+        self, session_id: str, res: str, command_status_code: Optional[int]
+    ):
         """Add the response given in the responses list."""
         # As always first check if the session is active
         if not self.check_session_exists(session_id):
             raise SessionDoesNotExist(session_id)
 
         # Now append the response in the list of responses
-        self._session_communications[session_id]["responses"].append(res)
+        self._session_communications[session_id]["responses"].append(
+            {"response": res, "command_status_code": command_status_code}
+        )
 
     def get_command(self, session_id: str):
         """Fetch the command from the communications."""
