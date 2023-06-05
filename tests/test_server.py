@@ -799,6 +799,7 @@ def test_post_res_with_dead_session(
             "response": "Some random response",
             "empty": False,
             "command_status_code": None,
+            "failed_to_execute": False,
         }
     )
 
@@ -835,6 +836,7 @@ def test_post_res_using_a_session_id_belonging_to_another_session(
             "response": "Just a simple response",
             "empty": False,
             "command_status_code": None,
+            "failed_to_execute": False,
         }
     )
 
@@ -904,6 +906,7 @@ def test_post_res_with_with_empty_flag(
             "response": "",
             "empty": True,
             "command_status_code": None,
+            "failed_to_execute": False,
         }
     )
 
@@ -945,6 +948,7 @@ def test_post_res_properly(
             "response": res,
             "empty": False,
             "command_status_code": None,
+            "failed_to_execute": False,
         }
     )
 
@@ -1053,8 +1057,20 @@ def test_fetch_res_when_the_hacker_is_not_in_a_session(
 @pytest.mark.parametrize(
     "response",
     [
-        ({"response": "just about to finish", "command_status_code": None}),
-        ({"response": "finished", "command_status_code": 0}),
+        (
+            {
+                "response": "just about to finish",
+                "command_status_code": None,
+                "failed_to_execute": False,
+            }
+        ),
+        (
+            {
+                "response": "finished",
+                "command_status_code": 0,
+                "failed_to_execute": False,
+            }
+        ),
     ],
 )
 def test_fetch_res_when_response_ends(
@@ -1074,7 +1090,10 @@ def test_fetch_res_when_response_ends(
 
     # Now emulate the case where we send the finished response
     hp.sessions.insert_response(
-        session_id, response["response"], response["command_status_code"]
+        session_id,
+        response["response"],
+        response["command_status_code"],
+        response["failed_to_execute"],
     )
 
     # Now try to fetch_res
@@ -1428,6 +1447,7 @@ def test_normal_flow(
         "response": "somebody",
         "empty": False,
         "command_status_code": None,
+        "failed_to_execute": False,
     }
 
     victim_client.request(

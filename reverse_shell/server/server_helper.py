@@ -19,6 +19,7 @@ from reverse_shell.server import ErrorCodes as ec
 class Response(TypedDict):
     response: str
     command_status_code: Optional[int]
+    failed_to_execute: bool
 
 
 class Communication(TypedDict):
@@ -337,7 +338,11 @@ class Sessions:
         self._session_communications[session_id]["command"] = cmd
 
     def insert_response(
-        self, session_id: str, res: str, command_status_code: Optional[int]
+        self,
+        session_id: str,
+        res: str,
+        command_status_code: Optional[int],
+        failed_to_execute: bool,
     ):
         """Add the response given in the responses list."""
         # As always first check if the session is active
@@ -346,7 +351,11 @@ class Sessions:
 
         # Now append the response in the list of responses
         self._session_communications[session_id]["responses"].append(
-            {"response": res, "command_status_code": command_status_code}
+            {
+                "response": res,
+                "command_status_code": command_status_code,
+                "failed_to_execute": failed_to_execute,
+            }
         )
 
     def get_command(self, session_id: str):
