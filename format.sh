@@ -12,7 +12,7 @@ black .
 # now flake8 for linting
 echo "\n---- Flake8"
 if [[ $(flake8) ]]; then
-    echo ""
+    flake8
 else
     echo "No Errors were found."
 fi

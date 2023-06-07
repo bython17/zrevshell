@@ -5,9 +5,9 @@ from sqlite3 import Cursor
 
 import helper as hp
 import pytest
-from reverse_shell.server.server_helper import Response
 
 import reverse_shell.utils as ut
+from reverse_shell.server.server_helper import Response
 
 
 @pytest.fixture(scope="function")
@@ -796,7 +796,7 @@ def test_post_res_with_dead_session(
     req_body = js.dumps(
         {
             "session_id": ut.generate_token(),  # This supposed to be the non-existing session_id
-            "response": "Some random response",
+            "response": {"stdout": "Some random response", "stderr": ""},
             "empty": False,
             "command_status_code": None,
             "failed_to_execute": False,
@@ -833,7 +833,7 @@ def test_post_res_using_a_session_id_belonging_to_another_session(
     req_body = js.dumps(
         {
             "session_id": session_id,
-            "response": "Just a simple response",
+            "response": {"stdout": "Just a simple response", "stderr": ""},
             "empty": False,
             "command_status_code": None,
             "failed_to_execute": False,
@@ -903,7 +903,7 @@ def test_post_res_with_with_empty_flag(
     req_body = js.dumps(
         {
             "session_id": session_id,
-            "response": "",
+            "response": {"stdout": "", "stderr": ""},
             "empty": True,
             "command_status_code": None,
             "failed_to_execute": False,
@@ -940,7 +940,7 @@ def test_post_res_properly(
 
     # Putting the hacker and victim inside a session
     session_id = hp.sessions.add_session(hacker_id, victim_id)
-    res = "testing"
+    res = {"stdout": "testing", "stderr": ""}
 
     req_body = js.dumps(
         {
@@ -968,6 +968,71 @@ def test_post_res_properly(
     remote_res = hp.sessions.get_response(session_id)[0]["response"]
 
     assert remote_res == res
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        (
+            {
+                "response": "hello",  # should be a dict
+                "empty": False,
+                "command_status_code": None,
+                "failed_to_execute": False,
+            }
+        ),
+        (
+            {
+                "response": {"stdout": "finished", "stderr": ""},
+                "empty": [],  # should be a bool
+                "command_status_code": 0,
+                "failed_to_execute": False,
+            }
+        ),
+        (
+            {
+                "response": {"stdout": "finished", "stderr": ""},
+                "empty": False,
+                "command_status_code": "hey",  # should be an int or None
+                "failed_to_execute": False,
+            }
+        ),
+        (
+            {
+                "response": {"stdout": "finished", "stderr": ""},
+                "empty": False,
+                "command_status_code": 0,
+                "failed_to_execute": [],  # should be a bool
+            }
+        ),
+    ],
+)
+def test_post_res_with_invalid_types(
+    client: HTTPConnection,
+    db_cursor: Cursor,
+    verified_client_header: dict[str, str],
+    body: Response,
+):
+    # Now let's do everything as expected and try it
+    victim_id = verified_client_header["client-id"]
+    create_victim(victim_id, db_cursor)
+
+    hacker_id = ut.generate_token()
+    create_hacker(hacker_id, db_cursor)
+
+    # Put em in a session
+    session_id = hp.sessions.add_session(hacker_id, victim_id)
+    json_string = js.dumps({"session_id": session_id, **body})
+
+    client.request(
+        "POST",
+        f"/{post_res_path}",
+        body=ut.encode_token(json_string),
+        headers=verified_client_header,
+    )
+
+    response = client.getresponse()
+    assert response.status == st.BAD_REQUEST
 
 
 # ---------- Testing command 'fetch_res' ---------- #
@@ -1059,14 +1124,14 @@ def test_fetch_res_when_the_hacker_is_not_in_a_session(
     [
         (
             {
-                "response": "just about to finish",
+                "response": {"stdout": "just about to finish", "stderr": ""},
                 "command_status_code": None,
                 "failed_to_execute": False,
             }
         ),
         (
             {
-                "response": "finished",
+                "response": {"stdout": "finished", "stderr": ""},
                 "command_status_code": 0,
                 "failed_to_execute": False,
             }
@@ -1091,7 +1156,8 @@ def test_fetch_res_when_response_ends(
     # Now emulate the case where we send the finished response
     hp.sessions.insert_response(
         session_id,
-        response["response"],
+        response["response"]["stdout"],
+        response["response"]["stderr"],
         response["command_status_code"],
         response["failed_to_execute"],
     )
@@ -1444,7 +1510,7 @@ def test_normal_flow(
     # and now we'll send the response via the victim
     victim_response = {
         "session_id": session_id,
-        "response": "somebody",
+        "response": {"stdout": "something", "stderr": ""},
         "empty": False,
         "command_status_code": None,
         "failed_to_execute": False,

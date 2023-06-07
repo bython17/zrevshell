@@ -9,6 +9,7 @@ packages = [{include = "reverse_shell"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
+typjson = "^0.0.32"
 
 [tool.poe]
 poetry_command = "exec"
