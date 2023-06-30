@@ -17,8 +17,9 @@ poetry_command = "exec"
 [tool.poe.tasks]
 format = "sh format.sh"
 build-victim = {shell = "cd reverse_shell/victim/ && cargo build --release"}
+test = "python3 ztest.py server_data/profile.json server_data/data.db"
 dev-victim = {shell = "cd reverse_shell/victim/ && cargo run"}
-dev-server = "python3 reverse_shell/server/server.py --connect-ip 127.0.0.1 -pf server_data/profile.json -sd server_data/data.db -d"
+dev-server = "python3 reverse_shell/server/server.py --connect-ip 127.0.0.1 -pf server_data/profile.json -sd server_data/data.db -cid 60 -d"
 server = "python3 reverse_shell/server/server.py"
 build = "python3 build.py"
 
@@ -28,6 +29,8 @@ pytest = "^7.2.1"
 black = "^23.1.0"
 flake8 = "^6.0.0"
 isort = "^5.12.0"
+colorama = "^0.4.6"
+prompt-toolkit = "^3.0.38"
 
 [tool.pytest.ini_options]
 testpaths = [

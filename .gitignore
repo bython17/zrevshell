@@ -139,3 +139,6 @@ ole32.dll
 
 # Rust target dir
 target/
+
+# ztest history
+.ztest_history
