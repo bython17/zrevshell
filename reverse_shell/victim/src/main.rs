@@ -1,7 +1,7 @@
-use victim::run;
+use victim;
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() {
-    // println!("CPU: {}", sys::cpu_speed().unwrap());
-    run().await;
+// TODO: make a way to get out of a stuck interactive program
+
+fn main() {
+    victim::run();
 }
