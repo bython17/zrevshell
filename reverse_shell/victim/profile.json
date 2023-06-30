@@ -13,5 +13,8 @@
   "delete_hacker": "/f6eed113",
   "port": 8080,
   "ip": "0.0.0.0",
-  "connect_ip": "127.0.0.1"
+  "connect_ip": "127.0.0.1",
+  "request_rate": 1,
+  "max_reconnect_timeout": 1800,
+  "min_reconnect_timeout": 10
 }

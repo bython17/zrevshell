@@ -20,6 +20,9 @@ struct Profile {
     fetch_cmd: String,
     post_res: String,
     get_session: String,
+    request_rate: u16,
+    min_reconnect_timeout: u16,
+    max_reconnect_timeout: u16,
 }
 
 impl Profile {
@@ -61,6 +64,9 @@ pub struct Config {{
     pub token: &'static str,
     pub connect_ip: Ipv4Addr,
     pub port: u16,
+    pub max_reconnect_timeout: u16,
+    pub min_reconnect_timeout: u16,
+    pub request_rate: u16
 }}
 
 impl Config {{
@@ -68,7 +74,10 @@ impl Config {{
         Config {{
             token: "{}",
             connect_ip: Ipv4Addr::from_str("{}").unwrap(),
-            port: {}
+            port: {},
+            min_reconnect_timeout: {},
+            max_reconnect_timeout: {},
+            request_rate: {}
         }}
     }}
 }}
@@ -101,11 +110,14 @@ pub struct EndPoints {{
 impl EndPoints {{
     pub fn new() -> Self {{
         let server_cmds = ServerCommands::new();
+        let mut base_path = Self::base_path();
+        // to avoid having paths starting with '//'
+        base_path.pop().unwrap();
         EndPoints {{
-            register: format!("{{}}{{}}", Self::base_path(), server_cmds.register),
-            fetch_cmd: format!("{{}}{{}}", Self::base_path(), server_cmds.fetch_cmd),
-            post_res: format!("{{}}{{}}", Self::base_path(), server_cmds.post_res),
-            get_session: format!("{{}}{{}}", Self::base_path(), server_cmds.get_session),
+            register: format!("{{}}{{}}", base_path, server_cmds.register),
+            fetch_cmd: format!("{{}}{{}}", base_path, server_cmds.fetch_cmd),
+            post_res: format!("{{}}{{}}", base_path, server_cmds.post_res),
+            get_session: format!("{{}}{{}}", base_path, server_cmds.get_session),
         }}
     }}
 
@@ -118,6 +130,9 @@ impl EndPoints {{
         profile.auth_token,
         profile.connect_ip.to_string(),
         profile.port,
+        profile.min_reconnect_timeout,
+        profile.max_reconnect_timeout,
+        profile.request_rate,
         profile.register,
         profile.fetch_cmd,
         profile.post_res,
