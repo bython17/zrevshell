@@ -325,8 +325,6 @@ class Sessions:
         if not self.check_client_in_session(client_id):
             return None
 
-        print(f"[DEBUG] {self._sessions}")
-
         session_id = [
             session_id
             for session_id, session in self._sessions.items()

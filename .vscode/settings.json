@@ -1,5 +1,5 @@
 {
-  "cSpell.words": ["machdep"],
+  "cSpell.words": ["crequest", "machdep"],
   "python.linting.flake8Enabled": true,
   "python.linting.mypyEnabled": true,
   "python.linting.enabled": true,
