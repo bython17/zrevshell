@@ -11,14 +11,14 @@ if not base_dir.resolve().is_dir():
     base_dir.mkdir(parents=True)
 
 # First initiate the database alone since we need to add another config
-database = server_helper.Database(None, base_dir, True, allow_multithreaded_db=True)
+database = server_helper.Database(base_dir / "data.db", allow_multithreaded_db=True)
 
 # Session data
 sessions = server_helper.Sessions()
 
 config = server_helper.Config(
     server_helper.get_argument_parser().parse_args(
-        ["-b", f"{base_dir}", "--connect-ip", "127.0.0.1", "-f"]
+        ["-sd", f"{base_dir}", "--connect-ip", "127.0.0.1"]
     ),
     database,
 )

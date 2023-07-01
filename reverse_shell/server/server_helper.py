@@ -56,9 +56,7 @@ class ClientAlreadyInSession(Exception):
 class Database:
     def __init__(
         self,
-        db_path: Path | None,
-        base_dir: Path,
-        force_base_dir_creation: bool,
+        db_path: Path,
         allow_multithreaded_db: bool = True,
     ):
         # ---- Required database schemas
@@ -85,14 +83,10 @@ class Database:
         ]
 
         # ---- Creating instances of the parameters
-        self.force_base_dir_creation = force_base_dir_creation
         self.allow_multithreaded_db = allow_multithreaded_db
-        self.base_dir = base_dir
 
         # ---- DB initialization
-        self.session_data = self.get_database(
-            "data.db", db_path, self.session_data_schema
-        )
+        self.session_data = self.get_database(db_path, self.session_data_schema)
 
     def strip_schema(self, schema: str):
         """Get rid of new lines and strip a schema to make it ready for comparison also remove the `IF NOT EXISTS` that will ruin the string validation."""
@@ -132,32 +126,16 @@ class Database:
             ut.log("debug", f"from: `{statement}`")
             return None
 
-    def get_database(
-        self, db_name: str, db_path: Path | None, db_schema: list[str]
-    ) -> sq.Connection:
+    def get_database(self, db_path: Path, db_schema: list[str]) -> sq.Connection:
         """Return a sqlite3 database connection using the user_config_option parameter and validate it using the db_schema option if the database is not provided by the user needed tables will be created using the db_schema list"""
 
-        db_filepath = db_path
         already_existing_db = True
-
-        if db_filepath is None:
-            # Or if we are not provided with a database
-            # create the base_directory and the database file
-            ut.create_base_dir(
-                self.base_dir, self.force_base_dir_creation, ec.could_not_overwrite
-            )
-            db_filepath = self.base_dir / db_name
-            # Since the file is new it is not user given
+        if not db_path.resolve().is_file():
+            # Inform the user that a new data.db is created
+            ut.log("info", "Generated session database.")
             already_existing_db = False
 
-        elif isinstance(db_filepath, Path):
-            # Exit with an error if the file provided by the user doesn't exist
-            if not db_filepath.resolve().exists():
-                ut.error_exit(
-                    f"The file `{db_filepath}` doesn't exist.", ec.file_not_found
-                )
-
-        db = sq.connect(db_filepath, check_same_thread=not self.allow_multithreaded_db)
+        db = sq.connect(db_path, check_same_thread=not self.allow_multithreaded_db)
         cur = db.cursor()
 
         # Let's now validate the database based on the db_schema argument
@@ -415,14 +393,15 @@ class Config:
     def __init__(self, config: Namespace, database: Optional[Database] = None):
         self.config = config
 
+        # ---- Get the base directory
+        self.base_dir = self.get_server_base_dir()
+
         # ---- Setup the profile file
         self.profile, self.profile_path = self.get_profile("profile.json")
 
         # Initialize the database according to config
         self.database = (
-            Database(config.session_data, config.base_dir, self.config.force)
-            if database is None
-            else database
+            Database(Path(f"{self.base_dir}/data.db")) if database is None else database
         )
 
         # ---- Tokens
@@ -512,6 +491,12 @@ class Config:
         # ---- Saving profile changes
         self.commit_profile()
 
+    def get_server_base_dir(self):
+        """Creates the base server directory"""
+        if not self.config.server_base_dir.resolve().is_dir():
+            self.config.server_base_dir.mkdir(parents=True)
+        return self.config.server_base_dir
+
     def get_server_cmd_id(self, cmd: str):
         """Get the server command from the profiles."""
         # Let's first check for the server_cmds entry in the profile
@@ -583,35 +568,25 @@ class Config:
         return token
 
     def get_profile(self, profile_name: str):
-        profile_filepath = self.config.profile
+        """Obtain or generate the server's profile"""
+        profile_path = Path(f"{self.base_dir}/{profile_name}")
 
-        if profile_filepath is None:
-            # Or the user didn't provide us with a profile,
-            # create the base_directory and the profile file
-            ut.create_base_dir(
-                self.config.base_dir, self.config.force, ec.could_not_overwrite
-            )
-            profile_filepath = self.config.base_dir / profile_name
+        if not profile_path.resolve().is_file():
+            # if the profile.json file doesn't exists in the base directory
             # Write {} to make it JSON decodable
-            ut.write_blank_json(profile_filepath)
-
-        elif isinstance(profile_filepath, Path):
-            # Exit with an error if the file provided by the user doesn't exist
-            if not profile_filepath.resolve().exists():
-                ut.error_exit(
-                    f"The file `{profile_filepath}` doesn't exist in {profile_filepath}",
-                    ec.file_not_found,
-                )
+            ut.write_blank_json(profile_path)
+            # Inform the user about the creation of a new profile
+            ut.log("info", "Generated a new profile.")
 
         # This is the validation,  we will just check if there
         # was a decode error when loading the profile
         try:
             # Load the JSON to memory
-            profile = js.loads(profile_filepath.read_text())
-            return profile, profile_filepath
+            profile = js.loads(profile_path.read_text())
+            return profile, profile_path
         except js.JSONDecodeError:
             ut.error_exit(
-                "Invalid session file. Please use server generated session files.",
+                "Invalid profile! Please use server generated profiles.",
                 ec.invalid_file,
             )
 
@@ -628,24 +603,14 @@ def get_argument_parser():
     )
 
     parser.add_argument(
-        "--profile",
-        "-pf",
-        type=Path,
-        required=False,
-        help=(
-            "Server generated profile database used to re-initiate the server with"
-            " the same profile as the previous."
-        ),
-        default=None,
-    )
-
-    parser.add_argument(
-        "--session-data",
+        "--server-base-dir",
         "-sd",
         type=Path,
         required=False,
-        help=("Server generated database used to resume the previous session's data."),
-        default=None,
+        help=(
+            "The directory where the program can find the server generated 'profile.json' and 'data.db'. if both or either of the files are missing new ones will be generated in the same directory."
+        ),
+        default=Path("./server_data/"),
     )
 
     parser.add_argument(
@@ -654,23 +619,6 @@ def get_argument_parser():
         action="store_true",
         required=False,
         help="Run the server in debug mode.",
-    )
-
-    parser.add_argument(
-        "--base-dir",
-        "-b",
-        type=Path,
-        required=False,
-        help="Directory where the server will store it's data.",
-        default=Path("server_data"),
-    )
-
-    parser.add_argument(
-        "--force",
-        "-f",
-        action="store_true",
-        required=False,
-        help="Force overwriting directory, when running the server.",
     )
 
     parser.add_argument(

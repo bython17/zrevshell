@@ -498,7 +498,11 @@ def list_clients(
     # making the output pretty
     if result is not None:
         key_list = ["client_id", "client_type", "last_requested", "status"]
-        print(format_db_query_result(result, key_list, val_fixer))
+        formatted_result = format_db_query_result(result, key_list, val_fixer)
+        if formatted_result.strip() != "":
+            print(formatted_result)
+        else:
+            print("There are no clients in the database.")
     else:
         print(f"{F.RED}error{S.RESET_ALL}: Couldn't execute query on database.")
 
@@ -512,7 +516,11 @@ def list_victim_info(
 
     if result is not None:
         key_list = ["client_id", "host_name", "os", "arch", "clock_speed", "ram"]
-        print(format_db_query_result(result, key_list))
+        formatted_result = format_db_query_result(result, key_list)
+        if formatted_result.strip() != "":
+            print(formatted_result)
+        else:
+            print("There are no victims in the database.")
     else:
         print(f"{F.RED}error{S.RESET_ALL}: Couldn't execute query on database.")
 
@@ -618,7 +626,7 @@ def parse_profile(profile_path: Path):
 
 
 def get_database(session_data_path: Path) -> sh.Database:
-    return sh.Database(session_data_path, session_data_path.parent, False)
+    return sh.Database(session_data_path)
 
 
 def get_profile_and_db():
