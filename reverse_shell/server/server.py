@@ -101,7 +101,10 @@ class ZrevshellServer(BaseHTTPRequestHandler):
                 self.handle_cmd_exit_session,
                 HTTPMethod.DELETE,
             ],
-            ut.ServerCommands.delete_hacker: [lambda: None, HTTPMethod.DELETE],
+            ut.ServerCommands.delete_hacker: [
+                self.handle_cmd_delete_hacker,
+                HTTPMethod.DELETE,
+            ],
         }
 
         # Initializing our parent, cuz of respect.
@@ -620,17 +623,27 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             True, HTTPStatus.OK, session_id, {"content-length": str(len(session_id))}
         )
 
+    def handle_cmd_delete_hacker(
+        self, client_id: str, client_type: int, req_body: str | None
+    ):
+        """Let the hacker delete itself from the server database."""
+        # Delete the hacker from the database
+        result = self.database.execute(
+            "DELETE FROM clients WHERE client_id=?", [client_id]
+        )
+        if result is None:
+            return sh.HandlerResponse(False, HTTPStatus.INTERNAL_SERVER_ERROR)
+        return sh.HandlerResponse(True, HTTPStatus.OK)
+
     def execute_command(
         self,
         client_id: str,
         command: str,
         handler_func,
-        *args,
         get_client_type_from_headers: bool = False,
-        **kwargs,
     ):
         """This method is in charge of handling any server command, provided the handler_function which handles the work done for the server command.
-        This method will get the body of the request and validate if the client is eligible of accessing the command. The function will send responses with the client when needed either it be an error or not. the handler_function should accept the client_id, client_type and req_body. The rest arguments and keyword arguments will be passed to the handler_func. req_body will be set to None if there is an error parsing the body of the request.
+        This method will get the body of the request and validate if the client is eligible of accessing the command. The function will send responses with the client when needed either it be an error or not. the handler_function should accept the client_id, client_type and req_body. req_body will be set to None if there is an error parsing the body of the request.
         """
         legit_client = False
 
@@ -703,9 +716,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # Having the request body ready and having a legit client let's execute
         # the handler for the command.
-        result: sh.HandlerResponse = handler_func(
-            *args, client_id=client_id, client_type=client_type, req_body=body, **kwargs
-        )
+        result: sh.HandlerResponse = handler_func(client_id, client_type, body)
 
         # Now we will send what the result sends, the result is expected to be
         # HandlerResponse which is easier to maintain.
