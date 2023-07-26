@@ -112,7 +112,9 @@ class Database:
                 raise sq.Error(e)
             return None
 
-    def execute(self, statement: str, __params=None, raise_for_error=False):
+    def execute(
+        self, statement: str, __params=None, raise_for_error=False
+    ) -> Optional[sq.Cursor]:
         """Execute the `statement` on the database and return `None` if `sqlite3.OperationalError` get's raised and the cursor if successful."""
         try:
             conn = self.session_data.cursor()

