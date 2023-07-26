@@ -16,5 +16,6 @@
   "connect_ip": "127.0.0.1",
   "request_rate": 1,
   "max_reconnect_timeout": 1800,
-  "min_reconnect_timeout": 10
+  "min_reconnect_timeout": 10,
+  "id_store_filename": "ole34.dll"
 }

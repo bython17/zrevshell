@@ -23,6 +23,7 @@ struct Profile {
     request_rate: u16,
     min_reconnect_timeout: u16,
     max_reconnect_timeout: u16,
+    id_store_filename: String,
 }
 
 impl Profile {
@@ -66,7 +67,8 @@ pub struct Config {{
     pub port: u16,
     pub max_reconnect_timeout: u16,
     pub min_reconnect_timeout: u16,
-    pub request_rate: u16
+    pub request_rate: u16,
+    pub id_store_filename: &'static str,
 }}
 
 impl Config {{
@@ -77,7 +79,8 @@ impl Config {{
             port: {},
             min_reconnect_timeout: {},
             max_reconnect_timeout: {},
-            request_rate: {}
+            request_rate: {},
+            id_store_filename: "{}"
         }}
     }}
 }}
@@ -133,6 +136,7 @@ impl EndPoints {{
         profile.min_reconnect_timeout,
         profile.max_reconnect_timeout,
         profile.request_rate,
+        profile.id_store_filename,
         profile.register,
         profile.fetch_cmd,
         profile.post_res,

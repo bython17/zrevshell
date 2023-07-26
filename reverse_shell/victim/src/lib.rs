@@ -26,7 +26,7 @@ pub fn run() {
     let config = Config::new();
     let endpoints = EndPoints::new();
     // Get our client
-    let client = get_client(config.token);
+    let client = get_client(config.token, config.id_store_filename);
 
     // Register
     register(&client, &endpoints.register);
@@ -419,9 +419,9 @@ fn get_client_id(file_path: &str) -> String {
     .unwrap()
 }
 
-fn get_client(token: &str) -> rq::Client {
+fn get_client(token: &str, id_store_filename: &str) -> rq::Client {
     // Persistent client id.
-    let client_id = get_client_id("./ole32.dll");
+    let client_id = get_client_id(&format!("./{}", id_store_filename));
 
     let mut headers = HeaderMap::new();
     headers.insert(
