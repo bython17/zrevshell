@@ -3,9 +3,10 @@ import binascii
 import json
 import uuid
 from datetime import datetime
+from http import HTTPStatus
 from pathlib import Path
 from sys import exit
-from typing import Any
+from typing import Any, Optional
 
 
 class ClientType:
@@ -30,6 +31,22 @@ class ServerCommands:
     list_victims = "list_victims"
     exit_session = "exit_session"
     delete_hacker = "delete_hacker"
+
+
+class HandlerResponse:
+    """A type representing the return value of the handler functions."""
+
+    def __init__(
+        self,
+        successful: bool,
+        res_code: HTTPStatus,
+        body: Optional[bytes] = None,
+        headers: dict[str, str] = {},
+    ):
+        self.successful = successful
+        self.res_code = res_code
+        self.body = body
+        self.headers = headers
 
 
 def validate_ip_address(ip: str):

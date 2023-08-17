@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from reverse_shell.server import server_helper
+from reverse_shell.server.database import Database
+from reverse_shell.server.sessions import InMemorySessions
+from reverse_shell.server.config import Config, get_argument_parser
 
 # Let's check if our base directory exists and if it doesn't
 # we'll create it.
@@ -11,13 +13,13 @@ if not base_dir.resolve().is_dir():
     base_dir.mkdir(parents=True)
 
 # First initiate the database alone since we need to add another config
-database = server_helper.Database(base_dir / "data.db", allow_multithreaded_db=True)
+database = Database(base_dir / "data.db", allow_multithreaded_db=True)
 
 # Session data
-sessions = server_helper.Sessions()
+sessions = InMemorySessions()
 
-config = server_helper.Config(
-    server_helper.get_argument_parser().parse_args(
+config = Config(
+    get_argument_parser().parse_args(
         ["-sd", f"{base_dir}", "--connect-ip", "127.0.0.1"]
     ),
     database,

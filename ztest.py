@@ -16,7 +16,7 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import ANSI
 from prompt_toolkit.history import FileHistory
 
-from reverse_shell.server import server_helper as sh
+import reverse_shell.server.database as db
 from reverse_shell.utils import decode_token as decode_b64
 from reverse_shell.utils import encode_token as encode_b64
 
@@ -192,7 +192,7 @@ def display_response(
 
 # ---- Handling commands
 def register(
-    command_name: str, args: list[str], profile: Profile, session_db: sh.Database
+    command_name: str, args: list[str], profile: Profile, session_db: db.Database
 ):
     ap = ArgumentParser(prog=command_name)
     ap.add_argument("client_id", type=str)
@@ -240,7 +240,7 @@ def register(
 
 # ---- Hacker commands
 def post_cmd(
-    command_name: str, args: list[str], profile: Profile, session_db: sh.Database
+    command_name: str, args: list[str], profile: Profile, session_db: db.Database
 ):
     ap = ArgumentParser(prog=command_name)
     ap.add_argument("command", type=str)
@@ -268,7 +268,7 @@ def post_cmd(
 
 
 def fetch_res(
-    command_name: str, args: list[str], profile: Profile, session_db: sh.Database
+    command_name: str, args: list[str], profile: Profile, session_db: db.Database
 ):
     ap = ArgumentParser(prog=command_name)
     ap.add_argument("-i", "--client_id", type=str, required=True)
@@ -293,7 +293,7 @@ def fetch_res(
 
 
 def create_session(
-    command_name: str, args: list[str], profile: Profile, session_db: sh.Database
+    command_name: str, args: list[str], profile: Profile, session_db: db.Database
 ):
     ap = ArgumentParser(prog=command_name)
     ap.add_argument("victim_id", type=str)
@@ -330,7 +330,7 @@ def list_victims_formatter(data: list[dict[str, Any]]) -> str:
 
 
 def list_victims(
-    command_name: str, args: list[str], profile: Profile, session_db: sh.Database
+    command_name: str, args: list[str], profile: Profile, session_db: db.Database
 ):
     # TODO: Implement victim filtration
     ap = ArgumentParser(prog=command_name)
@@ -353,7 +353,7 @@ def list_victims(
 
 
 def exit_session(
-    command_name: str, args: list[str], profile: Profile, session_db: sh.Database
+    command_name: str, args: list[str], profile: Profile, session_db: db.Database
 ):
     ap = ArgumentParser(prog=command_name)
     ap.add_argument("-i", "--client-id", required=True, type=str)
@@ -380,7 +380,7 @@ def exit_session(
 
 # --- Victim commands
 def fetch_cmd(
-    command_name: str, args: list[str], profile: Profile, session_db: sh.Database
+    command_name: str, args: list[str], profile: Profile, session_db: db.Database
 ):
     ap = ArgumentParser(prog=command_name)
     ap.add_argument("-i", "--client-id", required=True, type=str)
@@ -405,7 +405,7 @@ def fetch_cmd(
 
 
 def post_res(
-    command_name: str, args: list[str], profile: Profile, session_db: sh.Database
+    command_name: str, args: list[str], profile: Profile, session_db: db.Database
 ):
     ap = ArgumentParser(prog=command_name)
     ap.add_argument("-i", "--client-id", required=True, type=str)
@@ -440,7 +440,7 @@ def post_res(
 
 
 def get_session(
-    command_name: str, args: list[str], profile: Profile, session_db: sh.Database
+    command_name: str, args: list[str], profile: Profile, session_db: db.Database
 ):
     ap = ArgumentParser(prog=command_name)
     ap.add_argument("client_id", type=str)
@@ -477,7 +477,7 @@ def format_db_query_result(
 
 
 def list_clients(
-    command_name: str, args: list[str], profile: Profile, session_db: sh.Database
+    command_name: str, args: list[str], profile: Profile, session_db: db.Database
 ):
     # Fetching all the clients
     query = "SELECT * FROM clients"
@@ -508,7 +508,7 @@ def list_clients(
 
 
 def list_victim_info(
-    command_name: str, args: list[str], profile: Profile, session_db: sh.Database
+    command_name: str, args: list[str], profile: Profile, session_db: db.Database
 ):
     # Fetching all the victim
     query = "SELECT * FROM victim_info"
@@ -526,7 +526,7 @@ def list_victim_info(
 
 
 def execute_on_db(
-    command_name: str, args: list[str], profile: Profile, session_db: sh.Database
+    command_name: str, args: list[str], profile: Profile, session_db: db.Database
 ):
     ap = ArgumentParser(prog=command_name)
     ap.add_argument("statement", type=str)
@@ -562,7 +562,7 @@ def gen_help(cmd_handlers) -> str:
 
 def initiate_interactive_prompt(profile, session_db):
     command_and_handlers: dict[
-        str, Callable[[str, list[str], Profile, sh.Database], None]
+        str, Callable[[str, list[str], Profile, db.Database], None]
     ] = {
         "register": register,
         "list_clients": list_clients,
@@ -625,8 +625,8 @@ def parse_profile(profile_path: Path):
     return profile
 
 
-def get_database(session_data_path: Path) -> sh.Database:
-    return sh.Database(session_data_path)
+def get_database(session_data_path: Path) -> db.Database:
+    return db.Database(session_data_path)
 
 
 def get_profile_and_db():
