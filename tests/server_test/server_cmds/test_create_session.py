@@ -178,8 +178,6 @@ def test_create_session_when_hacker_has_exited_from_another_session(
     # Now kill the session, remove it from the client_list and the sessions map
     # this emulates the condition when the hacker exits a session.
     mk.sessions.kill_session(session_id)
-    mk.sessions._client_list.remove(hacker_id)
-    mk.sessions._sessions[session_id]["hacker_id"] = None
 
     # And now let's try to create a session with another
     # victim
