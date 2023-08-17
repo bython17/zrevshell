@@ -1,4 +1,5 @@
 from sqlite3 import Cursor
+
 import reverse_shell.utils as ut
 import tests.mock as mk
 

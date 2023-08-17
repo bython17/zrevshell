@@ -3,9 +3,9 @@ from threading import Thread
 
 import pytest
 
+import reverse_shell.utils as ut
 import tests.mock as mk
 from reverse_shell.server import server
-import reverse_shell.utils as ut
 
 
 @pytest.fixture(autouse=True, scope="session")

@@ -6,14 +6,14 @@ from sqlite3 import Cursor
 import reverse_shell.utils as ut
 import tests.mock as mk
 from reverse_shell.server.sessions import Response
-from tests.server_test.server_cmds.test_register import register_cmd_path
-from tests.server_test.server_cmds.test_get_session import get_session_path
 from tests.server_test.server_cmds.test_create_session import create_session_path
 from tests.server_test.server_cmds.test_exit_session import exit_session_path
 from tests.server_test.server_cmds.test_fetch_cmd import fetch_cmd_path
 from tests.server_test.server_cmds.test_fetch_res import fetch_res_path
+from tests.server_test.server_cmds.test_get_session import get_session_path
 from tests.server_test.server_cmds.test_post_cmd import post_cmd_path
 from tests.server_test.server_cmds.test_post_res import post_res_path
+from tests.server_test.server_cmds.test_register import register_cmd_path
 
 
 def test_normal_flow(

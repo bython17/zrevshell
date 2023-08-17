@@ -2,7 +2,6 @@ from http import HTTPStatus as st
 from http.client import HTTPConnection
 from sqlite3 import Cursor
 
-
 import reverse_shell.utils as ut
 import tests.mock as mk
 import tests.server_test.helper as hp

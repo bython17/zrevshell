@@ -1,8 +1,8 @@
 from pathlib import Path
 
+from reverse_shell.server.config import Config, get_argument_parser
 from reverse_shell.server.database import Database
 from reverse_shell.server.sessions import InMemorySessions
-from reverse_shell.server.config import Config, get_argument_parser
 
 # Let's check if our base directory exists and if it doesn't
 # we'll create it.

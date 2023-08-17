@@ -9,7 +9,6 @@ import reverse_shell.utils as ut
 import tests.mock as mk
 import tests.server_test.helper as hp
 
-
 # Command ID
 register_cmd_path = hp.get_cmd_id(ut.ServerCommands.register)
 
