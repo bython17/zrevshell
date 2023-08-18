@@ -20,8 +20,8 @@ build-victim = {shell = "cd reverse_shell/victim/ && cargo build --release"}
 test = "pytest"
 ztest = "python3 ztest.py server_data/profile.json server_data/data.db"
 dev-victim = {shell = "cd reverse_shell/victim/ && cargo run"}
-dev-server = "python3 reverse_shell/server/server.py --connect-ip 127.0.0.1 -cid 60 -d"
-server = "python3 reverse_shell/server/server.py"
+dev-server = "python3 reverse_shell/server/main.py --connect-ip 127.0.0.1 -cid 60 -d"
+server = "python3 reverse_shell/server/main.py"
 build = "python3 build.py"
 
 [tool.poetry.group.dev.dependencies]

@@ -4,5 +4,8 @@
   "python.linting.mypyEnabled": true,
   "python.linting.enabled": true,
   "python.analysis.typeCheckingMode": "off",
-  "rust-analyzer.linkedProjects": ["./reverse_shell/victim/Cargo.toml"]
+  "rust-analyzer.linkedProjects": ["./reverse_shell/victim/Cargo.toml"],
+  "python.testing.pytestArgs": ["tests"],
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true
 }

@@ -9,15 +9,7 @@
       "type": "python",
       "request": "launch",
       "program": "${file}",
-      "args": [
-        "--connect-ip",
-        "127.0.0.1",
-        "-pf",
-        "server_data/profile.json",
-        "-sd",
-        "server_data/data.db",
-        "-d"
-      ],
+      "args": ["--connect-ip", "127.0.0.1", "-cid", "60", "-d"],
       "console": "integratedTerminal",
       "justMyCode": true
     }
