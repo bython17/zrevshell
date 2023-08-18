@@ -1,13 +1,14 @@
 """ The execution point of the server. """
 
 # ---- imports
+import sys
+import threading as th
 from functools import partial
 from http.server import HTTPServer
-import threading as th
-import sys
+
+import reverse_shell.server.dependency_container as dc
 import reverse_shell.server.server as sv
 import reverse_shell.utils as ut
-import reverse_shell.server.dependency_container as dc
 
 
 def run_server(dependency_container: dc.ServerContainer):

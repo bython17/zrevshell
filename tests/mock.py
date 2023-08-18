@@ -4,8 +4,7 @@ from pathlib import Path
 from reverse_shell.server.config import Config, get_argument_parser
 from reverse_shell.server.database import Database
 from reverse_shell.server.dependency_container import ServerContainer
-from reverse_shell.server.sessions import SessionManager
-from reverse_shell.server.sessions import InMemorySessionManager
+from reverse_shell.server.sessions import InMemorySessionManager, SessionManager
 
 # ---- ServerContainer implementation
 

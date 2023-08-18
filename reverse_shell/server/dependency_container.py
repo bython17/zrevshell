@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from argparse import ArgumentParser
 from functools import cached_property
+
 import reverse_shell.server.config as cfg
 import reverse_shell.server.database as db
 import reverse_shell.server.sessions as ss

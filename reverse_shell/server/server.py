@@ -1,13 +1,13 @@
 """ The reverse shell server and request handler. """
 
 # ---- imports
-from http.server import BaseHTTPRequestHandler
 import sqlite3 as sq
 import threading as th
 import time as tm
 from binascii import Error as b64decodeError
 from dataclasses import dataclass
 from http import HTTPMethod, HTTPStatus
+from http.server import BaseHTTPRequestHandler
 from typing import Any, Callable, Literal, Optional
 
 import typ.json as js
