@@ -17,7 +17,7 @@ def test_exit_session_while_not_in_one(
     hp.create_hacker(hacker_id, db_cursor)
 
     # Now try to exit without providing a session_id
-    client.request("DELETE", f"/{exit_session_path}", headers=verified_hacker_header)
+    client.request("DELETE", f"{exit_session_path}", headers=verified_hacker_header)
 
     assert client.getresponse().status == st.BAD_REQUEST
 
@@ -29,12 +29,12 @@ def test_exit_session_when_in_session_but_with_fake_session(
     hp.create_hacker(hacker_id, db_cursor)
 
     # Ok let's put ourselves in session
-    mk.sessions.add_session(hacker_id, ut.generate_token())
+    mk.session_manager.add_session(hacker_id, ut.generate_token())
     fake_session_id = ut.encode_token(ut.generate_token())
 
     client.request(
         "DELETE",
-        f"/{exit_session_path}",
+        f"{exit_session_path}",
         body=fake_session_id,
         headers=verified_hacker_header,
     )
@@ -49,12 +49,12 @@ def test_exit_session_in_valid_session(
     hp.create_hacker(hacker_id, db_cursor)
 
     # Insert our selves in session
-    session_id = mk.sessions.add_session(hacker_id, ut.generate_token())
+    session_id = mk.session_manager.add_session(hacker_id, ut.generate_token())
 
     # Now request the server with the correct session
     client.request(
         "DELETE",
-        f"/{exit_session_path}",
+        f"{exit_session_path}",
         body=ut.encode_token(session_id),
         headers=verified_hacker_header,
     )
@@ -63,6 +63,6 @@ def test_exit_session_in_valid_session(
 
     # And now check if the same thing is reflected in the
     # sessions
-    session = mk.sessions.get_session(session_id)
+    session = mk.session_manager.get_session(session_id)
 
     assert not session["alive"]

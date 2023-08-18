@@ -28,7 +28,7 @@ def test_post_cmd_with_dead_session(
 
     client.request(
         "POST",
-        f"/{post_cmd_path}",
+        f"{post_cmd_path}",
         body=ut.encode_token(request_body),
         headers=verified_hacker_header,
     )
@@ -47,7 +47,7 @@ def test_post_cmd_with_victim_in_session(
     hp.create_victim(victim_id, db_cursor)
 
     # Let's put the victim in session with supposedly another hacker
-    session_id = mk.sessions.add_session(ut.generate_token(), victim_id)
+    session_id = mk.session_manager.add_session(ut.generate_token(), victim_id)
 
     request_body = js.dumps(
         {"session_id": session_id, "command": "whoami", "empty": False}
@@ -55,7 +55,7 @@ def test_post_cmd_with_victim_in_session(
 
     client.request(
         "POST",
-        f"/{post_cmd_path}",
+        f"{post_cmd_path}",
         body=ut.encode_token(request_body),
         headers=verified_hacker_header,
     )
@@ -74,9 +74,9 @@ def test_post_cmd_with_victim_in_other_session_and_hacker_in_another(
     hp.create_victim(victim_id, db_cursor)
 
     # And let's put the hacker inside another session
-    mk.sessions.add_session(hacker_id, ut.generate_token())
+    mk.session_manager.add_session(hacker_id, ut.generate_token())
     # Let's put the victim in session with supposedly another hacker
-    session_id = mk.sessions.add_session(ut.generate_token(), victim_id)
+    session_id = mk.session_manager.add_session(ut.generate_token(), victim_id)
 
     request_body = js.dumps(
         {"session_id": session_id, "command": "whoami", "empty": False}
@@ -84,7 +84,7 @@ def test_post_cmd_with_victim_in_other_session_and_hacker_in_another(
 
     client.request(
         "POST",
-        f"/{post_cmd_path}",
+        f"{post_cmd_path}",
         body=ut.encode_token(request_body),
         headers=verified_hacker_header,
     )
@@ -105,11 +105,11 @@ def test_post_cmd_without_body(
     hp.create_victim(victim_id, db_cursor)
 
     # Let's put the hacker in session with the victim
-    mk.sessions.add_session(hacker_id, victim_id)
+    mk.session_manager.add_session(hacker_id, victim_id)
 
     client.request(
         "POST",
-        f"/{post_cmd_path}",
+        f"{post_cmd_path}",
         body="",
         headers=verified_hacker_header,
     )
@@ -128,13 +128,13 @@ def test_post_cmd_with_empty_flag(
     hp.create_victim(victim_id, db_cursor)
 
     # putting the hacker in session with the victim
-    session_id = mk.sessions.add_session(hacker_id, victim_id)
+    session_id = mk.session_manager.add_session(hacker_id, victim_id)
 
     request_body = js.dumps({"session_id": session_id, "command": "", "empty": True})
 
     client.request(
         "POST",
-        f"/{post_cmd_path}",
+        f"{post_cmd_path}",
         body=ut.encode_token(request_body),
         headers=verified_hacker_header,
     )
@@ -142,7 +142,7 @@ def test_post_cmd_with_empty_flag(
     assert client.getresponse().status == st.CREATED
 
     # Check if the session comm is modified accordingly
-    assert mk.sessions.get_command(session_id) is None
+    assert mk.session_manager.get_command(session_id) is None
 
 
 def test_post_cmd_properly(
@@ -156,14 +156,14 @@ def test_post_cmd_properly(
     hp.create_victim(victim_id, db_cursor)
 
     # putting the hacker in session with the victim
-    session_id = mk.sessions.add_session(hacker_id, victim_id)
+    session_id = mk.session_manager.add_session(hacker_id, victim_id)
 
     cmd = "whoami"
     request_body = js.dumps({"session_id": session_id, "command": cmd, "empty": False})
 
     client.request(
         "POST",
-        f"/{post_cmd_path}",
+        f"{post_cmd_path}",
         body=ut.encode_token(request_body),
         headers=verified_hacker_header,
     )
@@ -171,4 +171,4 @@ def test_post_cmd_properly(
     assert client.getresponse().status == st.CREATED
 
     # Check if the session comm is modified accordingly
-    assert mk.sessions.get_command(session_id) == cmd
+    assert mk.session_manager.get_command(session_id) == cmd

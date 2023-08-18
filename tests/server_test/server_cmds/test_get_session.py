@@ -18,7 +18,7 @@ def test_get_session_without_a_session(
 
     # Let's request to get a session even though we are not
     # in one
-    client.request("GET", f"/{get_session_path}", headers=verified_client_header)
+    client.request("GET", f"{get_session_path}", headers=verified_client_header)
 
     assert client.getresponse().status == st.NOT_FOUND
 
@@ -30,9 +30,9 @@ def test_get_session_with_a_session(
     hp.create_victim(client_id, db_cursor)
 
     # Let's put the victim in a session with the hacker(well a fake one)
-    session_id = mk.sessions.add_session(client_id, ut.generate_token())
+    session_id = mk.session_manager.add_session(client_id, ut.generate_token())
 
-    client.request("GET", f"/{get_session_path}", headers=verified_client_header)
+    client.request("GET", f"{get_session_path}", headers=verified_client_header)
 
     response = client.getresponse()
 

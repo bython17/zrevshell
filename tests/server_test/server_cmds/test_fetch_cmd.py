@@ -18,7 +18,7 @@ def test_fetch_cmd_without_a_session_or_body(
     victim_id = verified_client_header["client-id"]
     hp.create_victim(victim_id, db_cursor)
 
-    client.request("GET", f"/{fetch_cmd_path}", headers=verified_client_header)
+    client.request("GET", f"{fetch_cmd_path}", headers=verified_client_header)
 
     assert client.getresponse().status == st.BAD_REQUEST
 
@@ -35,7 +35,7 @@ def test_fetch_cmd_with_a_fake_session(
 
     client.request(
         "GET",
-        f"/{fetch_cmd_path}",
+        f"{fetch_cmd_path}",
         headers=verified_client_header,
         body=fake_session_id,
     )
@@ -55,12 +55,12 @@ def test_fetch_cmd_in_a_session_but_with_an_empty_command(
     hacker_id = ut.generate_token()
     hp.create_hacker(hacker_id, db_cursor)
 
-    session_id = mk.sessions.add_session(hacker_id, victim_id)
+    session_id = mk.session_manager.add_session(hacker_id, victim_id)
     session_id = ut.encode_token(session_id)
 
     # Now make a fetch_cmd command with the session
     client.request(
-        "GET", f"/{fetch_cmd_path}", body=session_id, headers=verified_client_header
+        "GET", f"{fetch_cmd_path}", body=session_id, headers=verified_client_header
     )
 
     assert client.getresponse().status == st.NO_CONTENT
@@ -81,15 +81,15 @@ def test_fetch_cmd_in_session_with_command(
     hacker_id = ut.generate_token()
     hp.create_hacker(hacker_id, db_cursor)
 
-    session_id = mk.sessions.add_session(hacker_id, victim_id)
+    session_id = mk.session_manager.add_session(hacker_id, victim_id)
 
     # Insert a command into the session comm
     cmd = "whoami"
-    mk.sessions.insert_command(session_id, cmd)
+    mk.session_manager.insert_command(session_id, cmd)
     session_id = ut.encode_token(session_id)
 
     client.request(
-        "GET", f"/{fetch_cmd_path}", body=session_id, headers=verified_client_header
+        "GET", f"{fetch_cmd_path}", body=session_id, headers=verified_client_header
     )
 
     response = client.getresponse()

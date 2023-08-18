@@ -19,7 +19,7 @@ def test_create_session_without_body(
     # Create a sample hacker because we need to use it.
     hp.create_hacker(hacker_id, db_cursor)
 
-    client.request("POST", f"/{create_session_path}", headers=verified_hacker_header)
+    client.request("POST", f"{create_session_path}", headers=verified_hacker_header)
 
     assert client.getresponse().status == st.BAD_REQUEST
 
@@ -37,7 +37,7 @@ def test_create_session_with_invalid_victim(
 
     client.request(
         "POST",
-        f"/{create_session_path}",
+        f"{create_session_path}",
         body=ut.encode_token(victim_id),
         headers=verified_hacker_header,
     )
@@ -59,11 +59,11 @@ def test_create_session_with_victim_already_in_session(
     hp.create_hacker(hacker_id, db_cursor)
 
     # faking a session with a hacker for the victim
-    mk.sessions.add_session(hacker_id, victim_id)
+    mk.session_manager.add_session(hacker_id, victim_id)
 
     client.request(
         "POST",
-        f"/{create_session_path}",
+        f"{create_session_path}",
         body=ut.encode_token(victim_id),
         headers=verified_hacker_header,
     )
@@ -86,7 +86,7 @@ def test_create_session_for_session_id_in_body_as_hacker(
     # session with the client
     client.request(
         "POST",
-        f"/{create_session_path}",
+        f"{create_session_path}",
         body=ut.encode_token(victim_id),
         headers=verified_hacker_header,
     )
@@ -105,8 +105,8 @@ def test_create_session_for_session_id_in_body_as_hacker(
 
     # Now let's compare our session ID with what's already there
     assert (
-        mk.sessions.get_session(session_id)["hacker_id"] == hacker_id
-        and mk.sessions.get_session(session_id)["victim_id"] == victim_id
+        mk.session_manager.get_session(session_id)["hacker_id"] == hacker_id
+        and mk.session_manager.get_session(session_id)["victim_id"] == victim_id
     )
 
 
@@ -124,7 +124,7 @@ def test_create_session_when_hacker_in_multiple_valid_sessions(
     # the multiple sessions
     client.request(
         "POST",
-        f"/{create_session_path}",
+        f"{create_session_path}",
         body=ut.encode_token(victim1_id),
         headers=verified_hacker_header,
     )
@@ -145,13 +145,13 @@ def test_create_session_when_hacker_in_multiple_valid_sessions(
     session_id = ut.decode_token(raw_response)
 
     assert (
-        mk.sessions.get_session(session_id)["hacker_id"] == hacker_id
-        and mk.sessions.get_session(session_id)["victim_id"] == victim1_id
+        mk.session_manager.get_session(session_id)["hacker_id"] == hacker_id
+        and mk.session_manager.get_session(session_id)["victim_id"] == victim1_id
     )
 
     client.request(
         "POST",
-        f"/{create_session_path}",
+        f"{create_session_path}",
         body=ut.encode_token(victim2_id),
         headers=verified_hacker_header,
     )
@@ -174,10 +174,10 @@ def test_create_session_when_hacker_has_exited_from_another_session(
     victim_id = ut.generate_token()
     hp.create_victim(victim_id, db_cursor)
 
-    session_id = mk.sessions.add_session(hacker_id, victim_id)
+    session_id = mk.session_manager.add_session(hacker_id, victim_id)
     # Now kill the session, remove it from the client_list and the sessions map
     # this emulates the condition when the hacker exits a session.
-    mk.sessions.kill_session(session_id)
+    mk.session_manager.kill_session(session_id)
 
     # And now let's try to create a session with another
     # victim
@@ -186,7 +186,7 @@ def test_create_session_when_hacker_has_exited_from_another_session(
 
     client.request(
         "POST",
-        f"/{create_session_path}",
+        f"{create_session_path}",
         body=ut.encode_token(victim2_id),
         headers=verified_hacker_header,
     )
@@ -200,7 +200,7 @@ def test_create_session_when_hacker_has_exited_from_another_session(
 
     session_id = ut.decode_token(response.read(int(content_length)).decode())
 
-    assert mk.sessions.get_session_id(hacker_id) == session_id
+    assert mk.session_manager.get_session_id(hacker_id) == session_id
 
 
 def test_create_session_properly(
@@ -218,7 +218,7 @@ def test_create_session_properly(
 
     client.request(
         "POST",
-        f"/{create_session_path}",
+        f"{create_session_path}",
         body=ut.encode_token(victim_id),
         headers=verified_hacker_header,
     )
@@ -226,4 +226,4 @@ def test_create_session_properly(
     assert client.getresponse().status == st.OK
 
     # Also check in the hacking_sessions table
-    assert mk.sessions.check_client_in_session(victim_id)
+    assert mk.session_manager.check_client_in_session(victim_id)

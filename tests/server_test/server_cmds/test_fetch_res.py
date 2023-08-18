@@ -24,7 +24,7 @@ def test_fetch_res_without_providing_session_id(
     hacker_id = verified_hacker_header["client-id"]
     hp.create_hacker(hacker_id, db_cursor)
 
-    client.request("GET", f"/{fetch_res_path}", headers=verified_hacker_header)
+    client.request("GET", f"{fetch_res_path}", headers=verified_hacker_header)
 
     assert client.getresponse().status == st.BAD_REQUEST
 
@@ -42,7 +42,7 @@ def test_fetch_res_with_invalid_sessions(
 
     client.request(
         "GET",
-        f"/{fetch_res_path}",
+        f"{fetch_res_path}",
         body=ut.encode_token(fake_session_id),
         headers=verified_hacker_header,
     )
@@ -59,13 +59,15 @@ def test_fetch_res_with_a_valid_session_that_the_hacker_is_not_in(
     hacker_id = verified_hacker_header["client-id"]
     hp.create_hacker(hacker_id, db_cursor)
 
-    other_session = mk.sessions.add_session(ut.generate_token(), ut.generate_token())
+    other_session = mk.session_manager.add_session(
+        ut.generate_token(), ut.generate_token()
+    )
     # putting our selves in session to bypass the session check
-    mk.sessions.add_session(hacker_id, ut.generate_token())
+    mk.session_manager.add_session(hacker_id, ut.generate_token())
 
     client.request(
         "GET",
-        f"/{fetch_res_path}",
+        f"{fetch_res_path}",
         body=ut.encode_token(other_session),
         headers=verified_hacker_header,
     )
@@ -82,11 +84,13 @@ def test_fetch_res_when_the_hacker_is_not_in_a_session(
     hacker_id = verified_hacker_header["client-id"]
     hp.create_hacker(hacker_id, db_cursor)
 
-    other_session = mk.sessions.add_session(ut.generate_token(), ut.generate_token())
+    other_session = mk.session_manager.add_session(
+        ut.generate_token(), ut.generate_token()
+    )
 
     client.request(
         "GET",
-        f"/{fetch_res_path}",
+        f"{fetch_res_path}",
         body=ut.encode_token(other_session),
         headers=verified_hacker_header,
     )
@@ -126,10 +130,10 @@ def test_fetch_res_when_response_ends(
     hp.create_hacker(hacker_id, db_cursor)
 
     # Put a hacker and victim in session
-    session_id = mk.sessions.add_session(hacker_id, ut.generate_token())
+    session_id = mk.session_manager.add_session(hacker_id, ut.generate_token())
 
     # Now emulate the case where we send the finished response
-    mk.sessions.insert_response(
+    mk.session_manager.insert_response(
         session_id,
         response["response"]["stdout"],
         response["response"]["stderr"],
@@ -140,7 +144,7 @@ def test_fetch_res_when_response_ends(
     # Now try to fetch_res
     client.request(
         "GET",
-        f"/{fetch_res_path}",
+        f"{fetch_res_path}",
         body=ut.encode_token(session_id),
         headers=verified_hacker_header,
     )

@@ -28,7 +28,7 @@ def test_register_basic(
     client_id = verified_client_header["client-id"]
     client.request(
         "POST",
-        f"/{register_cmd_path}",
+        f"{register_cmd_path}",
         headers={
             **verified_client_header,
             "client-type": client_type.__str__(),
@@ -87,7 +87,7 @@ def test_register_victim_with_body(
     # Now let's request
     client.request(
         "POST",
-        f"/{register_cmd_path}",
+        f"{register_cmd_path}",
         body=encoded_body,
         headers={
             **verified_client_header,
@@ -128,7 +128,7 @@ def test_register_when_victim_exists(
     # Now let's check if the requests yield a conflict response
     client.request(
         "POST",
-        f"/{register_cmd_path}",
+        f"{register_cmd_path}",
         headers={
             **verified_client_header,
             "client-type": ut.ClientType.victim.__str__(),

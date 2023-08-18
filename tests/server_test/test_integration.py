@@ -40,7 +40,7 @@ def test_normal_flow(
     # first, then the victim will proceed
     hacker_client.request(
         "POST",
-        f"/{register_cmd_path}",
+        f"{register_cmd_path}",
         headers={
             **verified_hacker_header,
             "client-type": ut.ClientType.hacker.__str__(),
@@ -53,7 +53,7 @@ def test_normal_flow(
     # Now the victims turn
     victim_client.request(
         "POST",
-        f"/{register_cmd_path}",
+        f"{register_cmd_path}",
         body=ut.encode_token(victim_info),
         headers={
             **verified_client_header,
@@ -69,13 +69,13 @@ def test_normal_flow(
     # Let's simulate a real scenario
 
     # First try to fetch a session when there is none.
-    victim_client.request("GET", f"/{get_session_path}", headers=verified_client_header)
+    victim_client.request("GET", f"{get_session_path}", headers=verified_client_header)
     assert victim_client.getresponse().status == st.NOT_FOUND
 
     # Create a session with the victim
     hacker_client.request(
         "POST",
-        f"/{create_session_path}",
+        f"{create_session_path}",
         body=ut.encode_token(victim_id),
         headers=verified_hacker_header,
     )
@@ -93,7 +93,7 @@ def test_normal_flow(
 
     # Now let's try the get session one more time
     # this time we have to see a session
-    victim_client.request("GET", f"/{get_session_path}", headers=verified_client_header)
+    victim_client.request("GET", f"{get_session_path}", headers=verified_client_header)
 
     response = victim_client.getresponse()
     content_length = response.getheader("content-length")
@@ -116,7 +116,7 @@ def test_normal_flow(
     # fetch an empty command and see if it yields no content
     victim_client.request(
         "GET",
-        f"/{fetch_cmd_path}",
+        f"{fetch_cmd_path}",
         body=ut.encode_token(session_id),
         headers=verified_client_header,
     )
@@ -128,7 +128,7 @@ def test_normal_flow(
 
     hacker_client.request(
         "POST",
-        f"/{post_cmd_path}",
+        f"{post_cmd_path}",
         body=ut.encode_token(js.dumps(command)),
         headers=verified_hacker_header,
     )
@@ -138,7 +138,7 @@ def test_normal_flow(
     # Ok now let's do the fetch_cmd again by the victim
     victim_client.request(
         "GET",
-        f"/{fetch_cmd_path}",
+        f"{fetch_cmd_path}",
         body=ut.encode_token(session_id),
         headers=verified_client_header,
     )
@@ -160,7 +160,7 @@ def test_normal_flow(
     # Now do the same for the response
     hacker_client.request(
         "GET",
-        f"/{fetch_res_path}",
+        f"{fetch_res_path}",
         body=ut.encode_token(session_id),
         headers=verified_hacker_header,
     )
@@ -177,7 +177,7 @@ def test_normal_flow(
 
     victim_client.request(
         "POST",
-        f"/{post_res_path}",
+        f"{post_res_path}",
         body=ut.encode_token(js.dumps(victim_response)),
         headers=verified_client_header,
     )
@@ -186,7 +186,7 @@ def test_normal_flow(
     # Repeat the hacker's fetch_res
     hacker_client.request(
         "GET",
-        f"/{fetch_res_path}",
+        f"{fetch_res_path}",
         body=ut.encode_token(session_id),
         headers=verified_hacker_header,
     )
@@ -211,7 +211,7 @@ def test_normal_flow(
     # Now let's try to safely exit from the session
     hacker_client.request(
         "DELETE",
-        f"/{exit_session_path}",
+        f"{exit_session_path}",
         body=ut.encode_token(session_id),
         headers=verified_hacker_header,
     )
@@ -222,7 +222,7 @@ def test_normal_flow(
     # This time we should get a GONE error
     victim_client.request(
         "GET",
-        f"/{fetch_cmd_path}",
+        f"{fetch_cmd_path}",
         body=ut.encode_token(session_id),
         headers=verified_client_header,
     )
@@ -230,4 +230,4 @@ def test_normal_flow(
     assert victim_client.getresponse().status == st.GONE
 
     # Check if the session is deleted successfully
-    assert not mk.sessions.check_session_exists(session_id)
+    assert not mk.session_manager.check_session_exists(session_id)

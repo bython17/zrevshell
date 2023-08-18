@@ -12,12 +12,13 @@ delete_hacker_path = hp.get_cmd_id(ut.ServerCommands.delete_hacker)
 def test_delete_hacker(
     client: HTTPConnection, db_cursor: Cursor, verified_hacker_header: dict[str, str]
 ):
+    print(f"verified_hacker_header: {verified_hacker_header}")
     hacker_id = verified_hacker_header["client-id"]
     hp.create_hacker(hacker_id, db_cursor)
 
     # Now request a deletion of the hacker
     client.request(
-        "DELETE", f"/{delete_hacker_path}", body=None, headers=verified_hacker_header
+        "DELETE", f"{delete_hacker_path}", body=None, headers=verified_hacker_header
     )
 
     assert client.getresponse().status == st.OK

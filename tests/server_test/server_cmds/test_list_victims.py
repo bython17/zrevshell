@@ -18,7 +18,7 @@ def test_list_victims_with_no_victims(
 
     # Now let's request the server to list the victims, but it should
     # produce no victims i.e an empty array since there are no in the server
-    client.request("GET", f"/{list_victims_path}", headers=verified_hacker_header)
+    client.request("GET", f"{list_victims_path}", headers=verified_hacker_header)
 
     response = client.getresponse()
 
@@ -58,7 +58,7 @@ def test_list_victims_with_some_victims(
     hp.create_victim(client2_id, db_cursor, client2_info)
     hp.create_victim(client3_id, db_cursor, client3_info)
 
-    client.request("GET", f"/{list_victims_path}", headers=verified_hacker_header)
+    client.request("GET", f"{list_victims_path}", headers=verified_hacker_header)
     response = client.getresponse()
 
     # Check if the correct status code was returned

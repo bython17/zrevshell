@@ -35,7 +35,7 @@ def test_post_res_with_dead_session(
     # Now send this data to the server
     client.request(
         "POST",
-        f"/{post_res_path}",
+        f"{post_res_path}",
         body=ut.encode_token(req_body),
         headers=verified_client_header,
     )
@@ -55,8 +55,8 @@ def test_post_res_using_a_session_id_belonging_to_another_session(
 
     # and now let's put the victim and the hacker in different sessions
     # with different people
-    session_id = mk.sessions.add_session(hacker_id, ut.generate_token())
-    mk.sessions.add_session(ut.generate_token(), victim_id)
+    session_id = mk.session_manager.add_session(hacker_id, ut.generate_token())
+    mk.session_manager.add_session(ut.generate_token(), victim_id)
 
     # build the request_body
     req_body = js.dumps(
@@ -72,7 +72,7 @@ def test_post_res_using_a_session_id_belonging_to_another_session(
     # Now try requesting the server
     client.request(
         "POST",
-        f"/{post_res_path}",
+        f"{post_res_path}",
         body=ut.encode_token(req_body),
         headers=verified_client_header,
     )
@@ -90,7 +90,7 @@ def test_post_res_without_providing_the_body(
     hp.create_victim(victim_id, db_cursor)
 
     # Now let's just send the request
-    client.request("POST", f"/{post_res_path}", headers=verified_client_header)
+    client.request("POST", f"{post_res_path}", headers=verified_client_header)
 
     assert client.getresponse().status == st.BAD_REQUEST
 
@@ -108,7 +108,7 @@ def test_post_res_with_invalid_body(
     # Now let's just send the request
     client.request(
         "POST",
-        f"/{post_res_path}",
+        f"{post_res_path}",
         body=ut.encode_token(req_body),
         headers=verified_client_header,
     )
@@ -127,7 +127,7 @@ def test_post_res_with_with_empty_flag(
     hp.create_hacker(hacker_id, db_cursor)
 
     # Putting the hacker and victim inside a session
-    session_id = mk.sessions.add_session(hacker_id, victim_id)
+    session_id = mk.session_manager.add_session(hacker_id, victim_id)
 
     req_body = js.dumps(
         {
@@ -141,7 +141,7 @@ def test_post_res_with_with_empty_flag(
 
     client.request(
         "POST",
-        f"/{post_res_path}",
+        f"{post_res_path}",
         body=ut.encode_token(req_body),
         headers=verified_client_header,
     )
@@ -152,7 +152,7 @@ def test_post_res_with_with_empty_flag(
 
     assert response.status == st.OK
 
-    remote_res = mk.sessions.get_response(session_id)
+    remote_res = mk.session_manager.get_response(session_id)
 
     assert remote_res == []
 
@@ -168,7 +168,7 @@ def test_post_res_properly(
     hp.create_hacker(hacker_id, db_cursor)
 
     # Putting the hacker and victim inside a session
-    session_id = mk.sessions.add_session(hacker_id, victim_id)
+    session_id = mk.session_manager.add_session(hacker_id, victim_id)
     res = {"stdout": "testing", "stderr": ""}
 
     req_body = js.dumps(
@@ -183,7 +183,7 @@ def test_post_res_properly(
 
     client.request(
         "POST",
-        f"/{post_res_path}",
+        f"{post_res_path}",
         body=ut.encode_token(req_body),
         headers=verified_client_header,
     )
@@ -194,7 +194,7 @@ def test_post_res_properly(
 
     assert response.status == st.OK
 
-    remote_res = mk.sessions.get_response(session_id)[0]["response"]
+    remote_res = mk.session_manager.get_response(session_id)[0]["response"]
 
     assert remote_res == res
 
@@ -250,12 +250,12 @@ def test_post_res_with_invalid_types(
     hp.create_hacker(hacker_id, db_cursor)
 
     # Put em in a session
-    session_id = mk.sessions.add_session(hacker_id, victim_id)
+    session_id = mk.session_manager.add_session(hacker_id, victim_id)
     json_string = js.dumps({"session_id": session_id, **body})
 
     client.request(
         "POST",
-        f"/{post_res_path}",
+        f"{post_res_path}",
         body=ut.encode_token(json_string),
         headers=verified_client_header,
     )
