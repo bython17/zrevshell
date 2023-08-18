@@ -5,18 +5,16 @@ import pytest
 
 import reverse_shell.utils as ut
 import tests.mock as mk
-from reverse_shell.server import server
+from reverse_shell.server.main import run_server
 
 
 @pytest.fixture(autouse=True, scope="session")
 def start_server():
     # let's run the server with another thread, and using the configuration and live data
-    server_thread = Thread(
-        target=server.run_server, args=(mk.config, mk.sessions), daemon=True
-    )
+    server_thread = Thread(target=run_server, args=(mk.container,), daemon=True)
     server_thread.start()
     yield
-    mk.database.session_data.close()
+    mk.database.close_db()
 
 
 @pytest.fixture(scope="session")
@@ -47,7 +45,7 @@ def verified_hacker_header():
 @pytest.fixture(scope="function")
 def db_cursor():
     # yields the database cursor and erases all data after the test finishes
-    db_cursor = mk.database.session_data.cursor()
+    db_cursor = mk.container.database.session_data.cursor()
     yield db_cursor
     # ---------- The tear down
     # First get all the table names from the database

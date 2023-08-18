@@ -7,7 +7,6 @@ from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
 from pathlib import Path
 from typing import Optional
 
-import reverse_shell.server.database as db
 import reverse_shell.utils as ut
 from reverse_shell import __app_name__, __version__
 from reverse_shell.server import ErrorCodes as ec
@@ -26,7 +25,6 @@ class Config:
     def __init__(
         self,
         config: Namespace,
-        database: Optional[db.Database] = None,
     ):
         self.config = config
 
@@ -36,12 +34,8 @@ class Config:
         # ---- Setup the profile file
         self.profile, self.profile_path = self.get_profile("profile.json")
 
-        # Initialize the database according to config
-        self.database = (
-            db.Database(Path(f"{self.base_dir}/data.db"))
-            if database is None
-            else database
-        )
+        # ---- Database path
+        self.database_path = Path(f"{self.base_dir}/data.db")
 
         # ---- Tokens
         self.auth_token = self.get_token("auth_token")
@@ -132,8 +126,7 @@ class Config:
         )
 
         # --- Timeouts and request rate
-        # These are no use for the server itself, but for the clients that are generated
-        # from it's profile
+        # These are no use for the server itself, but for the clients that are generated from it's profile
         self.get_request_rate(self.config.request_rate)
         self.get_timeout(
             "max_reconnect_timeout",
@@ -273,7 +266,7 @@ class Config:
         # It failed to recognize that the program quits if the js.JSONDecodeError happens
 
 
-def get_argument_parser():
+def get_argument_parser() -> ArgumentParser:
     """Argument parsing"""
     parser = ArgumentParser(
         prog=f"{__app_name__} server",

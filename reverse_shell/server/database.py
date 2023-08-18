@@ -135,3 +135,7 @@ class Database:
             db.commit()
 
         return db
+
+    def close_db(self):
+        """Close the database connection."""
+        self.session_data.close()

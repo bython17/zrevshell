@@ -42,7 +42,7 @@ class ClientAlreadyInSession(Exception):
         self.message = f"The client `{client_id}` is already in a session."
 
 
-class Sessions(ABC):
+class SessionManager(ABC):
     """Manages sessions(hackers with victims) and allows to add new sessions, delete existing ones
     and etc... using a session_id."""
 
@@ -111,7 +111,8 @@ class Sessions(ABC):
         pass
 
 
-class InMemorySessions(Sessions):
+# ---- Session implementations
+class InMemorySessionManager(SessionManager):
     """An InMemory implementation of `Sessions` using python dictionaries."""
 
     def __init__(self):
