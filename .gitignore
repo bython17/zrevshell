@@ -142,3 +142,6 @@ target/
 
 # ztest history
 .ztest_history
+
+# mac stuff
+.DS_Store
