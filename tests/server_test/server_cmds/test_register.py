@@ -10,12 +10,12 @@ import tests.mock as mk
 import tests.server_test.helper as hp
 
 # Command ID
-register_cmd_path = hp.get_cmd_id(ut.ServerCommands.register)
+register_cmd_path = hp.get_cmd_endpoint(ut.ServerCommand.register)
 
 
 @pytest.mark.parametrize(
     "client_type",
-    [(ut.ClientType.hacker), (ut.ClientType.victim)],
+    [(ut.ClientType.hacker.value), (ut.ClientType.victim.value)],
 )
 def test_register_basic(
     client: HTTPConnection,
@@ -91,7 +91,7 @@ def test_register_victim_with_body(
         body=encoded_body,
         headers={
             **verified_client_header,
-            "client-type": ut.ClientType.victim.__str__(),
+            "client-type": ut.ClientType.victim.value.__str__(),
         },
     )
     # First check if the status code is correct
@@ -131,7 +131,7 @@ def test_register_when_victim_exists(
         f"{register_cmd_path}",
         headers={
             **verified_client_header,
-            "client-type": ut.ClientType.victim.__str__(),
+            "client-type": ut.ClientType.victim.value.__str__(),
         },
     )
 

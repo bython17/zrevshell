@@ -7,7 +7,7 @@ import tests.mock as mk
 import tests.server_test.helper as hp
 
 # Command ID
-create_session_path = hp.get_cmd_id(ut.ServerCommands.create_session)
+create_session_path = hp.get_cmd_endpoint(ut.ServerCommand.create_session)
 
 
 def test_create_session_without_body(

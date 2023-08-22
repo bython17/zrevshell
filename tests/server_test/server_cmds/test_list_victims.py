@@ -7,7 +7,7 @@ import reverse_shell.utils as ut
 import tests.server_test.helper as hp
 
 # Command ID
-list_victims_path = hp.get_cmd_id(ut.ServerCommands.list_victims)
+list_victims_path = hp.get_cmd_endpoint(ut.ServerCommand.list_victims)
 
 
 def test_list_victims_with_no_victims(

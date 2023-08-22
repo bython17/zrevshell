@@ -6,7 +6,7 @@ import reverse_shell.utils as ut
 import tests.server_test.helper as hp
 
 # Command ID
-delete_hacker_path = hp.get_cmd_id(ut.ServerCommands.delete_hacker)
+delete_hacker_path = hp.get_cmd_endpoint(ut.ServerCommand.delete_hacker)
 
 
 def test_delete_hacker(

@@ -7,7 +7,7 @@ import tests.mock as mk
 import tests.server_test.helper as hp
 
 # Command ID
-exit_session_path = hp.get_cmd_id(ut.ServerCommands.exit_session)
+exit_session_path = hp.get_cmd_endpoint(ut.ServerCommand.exit_session)
 
 
 def test_exit_session_while_not_in_one(

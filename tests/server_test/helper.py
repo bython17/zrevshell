@@ -33,8 +33,8 @@ def create_victim(
     )
 
 
-def get_cmd_id(command_name: str):
-    """Make sure you know the command exists and is unique to get proper results."""
+def get_cmd_endpoint(command: ut.ServerCommand):
+    """Get an endpoint of a command"""
     return [
-        key for key, value in mk.config.server_cmds.items() if value == command_name
+        value for key, value in mk.config.server_cmd_endpoints.items() if key == command
     ][0]

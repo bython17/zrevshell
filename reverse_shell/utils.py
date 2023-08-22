@@ -1,5 +1,6 @@
 import base64
 import binascii
+from enum import Enum
 import json
 import uuid
 from datetime import datetime
@@ -9,16 +10,14 @@ from sys import exit
 from typing import Any, Optional
 
 
-class ClientType:
-    """Used to distinguish between the 3 client types. Use each field to represent the corresponding client type."""
+class ClientType(int, Enum):
+    """Used to distinguish between the 2 client types. Use each field to represent the corresponding client type."""
 
-    # We didn't use Enum, because Enums are not JSON serializable.
-    # Plain numbers are fine since we don't care about the values
     hacker = 1
     victim = 2
 
 
-class ServerCommands:
+class ServerCommand(str, Enum):
     """Used to define the string representation of the server commands. just for avoiding the use of literals."""
 
     register = "register"

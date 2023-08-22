@@ -11,7 +11,7 @@ import tests.server_test.helper as hp
 from reverse_shell.server.sessions import Response
 
 # Command ID
-post_res_path = hp.get_cmd_id(ut.ServerCommands.post_res)
+post_res_path = hp.get_cmd_endpoint(ut.ServerCommand.post_res)
 
 
 def test_post_res_with_dead_session(

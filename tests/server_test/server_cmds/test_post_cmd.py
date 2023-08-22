@@ -8,7 +8,7 @@ import tests.mock as mk
 import tests.server_test.helper as hp
 
 # Command ID
-post_cmd_path = hp.get_cmd_id(ut.ServerCommands.post_cmd)
+post_cmd_path = hp.get_cmd_endpoint(ut.ServerCommand.post_cmd)
 
 
 def test_post_cmd_with_dead_session(

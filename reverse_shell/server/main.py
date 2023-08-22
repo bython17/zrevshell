@@ -58,8 +58,8 @@ def run_server(dependency_container: dc.ServerContainer):
     if configuration.is_debug:
         print("\r")
         ut.log("info", "--------- Server request endpoints --------")
-        for key, val in configuration.server_cmds.items():
-            ut.log("info", f"{val} -- {key}")
+        for key, val in configuration.server_cmd_endpoints.items():
+            ut.log("info", f"{key.value} -- {val}")
 
     # Create some empty space for the proceeding
     print("\r")

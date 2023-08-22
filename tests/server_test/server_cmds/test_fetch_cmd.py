@@ -7,7 +7,7 @@ import tests.mock as mk
 import tests.server_test.helper as hp
 
 # Command ID
-fetch_cmd_path = hp.get_cmd_id(ut.ServerCommands.fetch_cmd)
+fetch_cmd_path = hp.get_cmd_endpoint(ut.ServerCommand.fetch_cmd)
 
 
 def test_fetch_cmd_without_a_session_or_body(

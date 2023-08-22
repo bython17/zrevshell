@@ -43,7 +43,7 @@ def test_normal_flow(
         f"{register_cmd_path}",
         headers={
             **verified_hacker_header,
-            "client-type": ut.ClientType.hacker.__str__(),
+            "client-type": ut.ClientType.hacker.value.__str__(),
         },
     )
 
@@ -57,7 +57,7 @@ def test_normal_flow(
         body=ut.encode_token(victim_info),
         headers={
             **verified_client_header,
-            "client-type": ut.ClientType.victim.__str__(),
+            "client-type": ut.ClientType.victim.value.__str__(),
         },
     )
 

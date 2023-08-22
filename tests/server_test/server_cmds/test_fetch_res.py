@@ -11,7 +11,7 @@ import tests.server_test.helper as hp
 from reverse_shell.server.sessions import Response
 
 # Command ID
-fetch_res_path = hp.get_cmd_id(ut.ServerCommands.fetch_res)
+fetch_res_path = hp.get_cmd_endpoint(ut.ServerCommand.fetch_res)
 
 
 def test_fetch_res_without_providing_session_id(
