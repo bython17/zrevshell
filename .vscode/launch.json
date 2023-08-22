@@ -8,7 +8,7 @@
       "name": "zrevshell server",
       "type": "python",
       "request": "launch",
-      "program": "${file}",
+      "program": "reverse_shell/server/main.py",
       "args": ["--connect-ip", "127.0.0.1", "-cid", "60", "-d"],
       "console": "integratedTerminal",
       "justMyCode": true
