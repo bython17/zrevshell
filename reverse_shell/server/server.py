@@ -56,6 +56,7 @@ class PostCmdJsonBody:
     empty: bool
 
 
+# TODO(extra): override the log_request method to do custom and useful log.
 class ZrevshellServer(BaseHTTPRequestHandler):
     """Request handling."""
 

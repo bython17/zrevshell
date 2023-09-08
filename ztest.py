@@ -23,6 +23,8 @@ from reverse_shell.utils import encode_token as encode_b64
 # Mimic the json structure of the profile generated
 # by the server.
 
+# TODO: Re think the whole way Ztest works!!
+
 
 @dataclass
 class Tokens:
