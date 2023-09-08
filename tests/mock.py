@@ -4,7 +4,11 @@ from pathlib import Path
 from reverse_shell.server.config import Config, get_argument_parser
 from reverse_shell.server.database import Database
 from reverse_shell.server.dependency_container import ServerContainer
-from reverse_shell.server.sessions import InMemorySessionManager, SessionManager
+from reverse_shell.server.sessions import (
+    # InMemorySessionManager,
+    OnDiskSessionManager,
+    SessionManager,
+)
 
 # ---- ServerContainer implementation
 
@@ -41,7 +45,7 @@ class MockContainer(ServerContainer):
 
     @cached_property
     def session_manager(self) -> SessionManager:
-        return InMemorySessionManager()
+        return OnDiskSessionManager(self.config.base_dir)
 
 
 # Shared container between all tests

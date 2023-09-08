@@ -3,13 +3,12 @@ import sqlite3 as sq
 
 # from http.client import HTTPMessage
 from pathlib import Path
-from typing import Optional
 
 import reverse_shell.utils as ut
 from reverse_shell.server import ErrorCodes as ec
 
 
-class Database:
+class Database(ut.DatabaseUtils):
     def __init__(
         self,
         db_path: Path,
@@ -43,46 +42,7 @@ class Database:
 
         # ---- DB initialization
         self.session_data = self.get_database(db_path, self.session_data_schema)
-
-    def strip_schema(self, schema: str):
-        """Get rid of new lines and strip a schema to make it ready for comparison also remove the `IF NOT EXISTS` that will ruin the string validation."""
-
-        # remove the `IF NOT EXISTS` and `;` since it doesn't exist in the sqlite_schema table
-        schema = schema.replace("IF NOT EXISTS ", "")
-        schema = schema.replace(";", "")
-
-        schema_lst = schema.splitlines()
-        schema_lst = [schema.strip() for schema in schema_lst]
-
-        return "".join(schema_lst)
-
-    def query(self, query: str, __params=None, raise_for_error=False):
-        """Return all results that return from a database query provided by `query` and return None when`sqlite3.OperationalError` occurs"""
-        # Let's execute and handle the query
-        try:
-            cur = self.session_data.cursor()
-            cur.execute(query, __params if __params is not None else ())
-            return cur.fetchall()
-        except sq.Error as e:
-            if raise_for_error:
-                raise sq.Error(e)
-            return None
-
-    def execute(
-        self, statement: str, __params=None, raise_for_error=False
-    ) -> Optional[sq.Cursor]:
-        """Execute the `statement` on the database and return `None` if `sqlite3.OperationalError` get's raised and the cursor if successful."""
-        try:
-            conn = self.session_data.cursor()
-            res_cur = conn.execute(statement, __params if __params is not None else ())
-            self.session_data.commit()
-            return res_cur
-        except sq.Error as e:
-            if raise_for_error:
-                raise sq.Error(e)
-            ut.log("debug", f"SQLERROR: {e}")
-            ut.log("debug", f"from: `{statement}`")
-            return None
+        super().__init__(self.session_data)
 
     def get_database(self, db_path: Path, db_schema: list[str]) -> sq.Connection:
         """Return a sqlite3 database connection using the user_config_option parameter and validate it using the db_schema option if the database is not provided by the user needed tables will be created using the db_schema list"""

